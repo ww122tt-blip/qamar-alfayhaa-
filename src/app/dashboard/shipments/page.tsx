@@ -5,12 +5,13 @@ import {
   Package, Plus, Search, Filter, Printer, Trash2, Edit, Eye,
   RefreshCw, Send, X, Phone, MapPin, Scale, DollarSign,
   CheckCircle, MessageSquare, AlertCircle, Loader2, ChevronDown,
-  ArrowUpDown, Clock, Truck, RotateCcw, CheckCircle2, XCircle, AlertTriangle
+  ArrowUpDown, Clock, Truck, RotateCcw, CheckCircle2, XCircle, AlertTriangle, Image as ImageIcon, Warehouse as WarehouseIcon
 } from 'lucide-react'
 import { formatCurrency, formatDate, getStatusClass, getStatusLabel, IRAQI_GOVERNORATES, generateShipmentNumber } from '@/lib/utils'
-import type { ShipmentStatus, Shipment, Client } from '@/types'
+import type { ShipmentStatus, Shipment, Client, Warehouse } from '@/types'
 import { supabase } from '@/lib/supabase'
 import { sendWhatsAppMessage } from '@/lib/whatsapp'
+import imageCompression from 'browser-image-compression'
 
 const STATUS_FILTER_OPTIONS: { value: ShipmentStatus | 'all'; label: string }[] = [
   { value: 'all', label: 'جميع الحالات' },
@@ -46,14 +47,15 @@ async function addNotification(title: string, content: string, type: string, ent
 }
 
 // ====== ADD SHIPMENT MODAL ======
-function AddShipmentModal({ onClose, onAdd }: { onClose: () => void; onAdd: (s: Shipment) => void }) {
+function AddShipmentModal({ onClose, onAdd, warehouses }: { onClose: () => void; onAdd: (s: Shipment) => void; warehouses: Warehouse[] }) {
   const [clients, setClients] = useState<Client[]>([])
   const [form, setForm] = useState({
     client_id: '', recipient_name: '', recipient_phone: '',
     governorate: '', district: '', weight: '', item_price: '',
-    delivery_fee: '5000', cod_amount: '', notes: '',
+    delivery_fee: '5000', cod_amount: '', notes: '', warehouse_id: ''
   })
   const [loading, setLoading] = useState(false)
+  const [imageFile, setImageFile] = useState<File | null>(null)
 
   useEffect(() => {
     supabase.from('clients').select('*').eq('is_active', true).then(({ data }) => {
@@ -64,6 +66,22 @@ function AddShipmentModal({ onClose, onAdd }: { onClose: () => void; onAdd: (s: 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+    
+    let imageUrl = null
+    if (imageFile) {
+      try {
+        const compressedFile = await imageCompression(imageFile, { maxSizeMB: 1, maxWidthOrHeight: 1024, useWebWorker: true })
+        const fileName = `${Math.random().toString(36).substring(2)}-${compressedFile.name}`
+        const { error: uploadError } = await supabase.storage.from('shipment_images').upload(fileName, compressedFile)
+        if (!uploadError) {
+          const { data } = supabase.storage.from('shipment_images').getPublicUrl(fileName)
+          imageUrl = data.publicUrl
+        }
+      } catch (err) {
+        console.error('Image compression/upload failed', err)
+      }
+    }
+
     const newShipmentData = {
       code: generateShipmentNumber(Math.floor(Math.random() * 9999)),
       client_id: form.client_id,
@@ -75,8 +93,10 @@ function AddShipmentModal({ onClose, onAdd }: { onClose: () => void; onAdd: (s: 
       delivery_fee: parseFloat(form.delivery_fee) || 5000,
       notes: form.notes,
       status: 'new',
+      warehouse_id: form.warehouse_id || null,
+      image_url: imageUrl
     }
-    const { data, error } = await supabase.from('shipments').insert([newShipmentData]).select('*, client:clients(*)').single()
+    const { data, error } = await supabase.from('shipments').insert([newShipmentData]).select('*, client:clients(*), warehouse:warehouses(*)').single()
     if (data && !error) {
       await logActivity('إنشاء شحنة', 'shipment', data.code, `تم إنشاء شحنة جديدة: ${data.code} للمستلم ${form.recipient_name}`)
       await addNotification('شحنة جديدة', `تم إنشاء الشحنة ${data.code}`, 'shipment', data.code)
@@ -109,12 +129,21 @@ function AddShipmentModal({ onClose, onAdd }: { onClose: () => void; onAdd: (s: 
           <button onClick={onClose} disabled={loading} className="btn-ghost p-2 rounded-lg hover:bg-slate-200 text-slate-500"><X size={18} /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          <div>
-            <label className="block text-sm font-bold mb-2 text-slate-700">العميل المرسل *</label>
-            <select required value={form.client_id} onChange={e => setForm(p => ({ ...p, client_id: e.target.value }))} className="input-field bg-white shadow-sm" disabled={loading}>
-              <option value="">اختر العميل...</option>
-              {clients.map(c => <option key={c.id} value={c.id}>{c.name} - {c.code}</option>)}
-            </select>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-bold mb-2 text-slate-700">العميل المرسل *</label>
+              <select required value={form.client_id} onChange={e => setForm(p => ({ ...p, client_id: e.target.value }))} className="input-field bg-white shadow-sm" disabled={loading}>
+                <option value="">اختر العميل...</option>
+                {clients.map(c => <option key={c.id} value={c.id}>{c.name} - {c.code}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-bold mb-2 text-slate-700">المستودع (المكان الحالي)</label>
+              <select value={form.warehouse_id} onChange={e => setForm(p => ({ ...p, warehouse_id: e.target.value }))} className="input-field bg-white shadow-sm" disabled={loading}>
+                <option value="">غير محدد</option>
+                {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+              </select>
+            </div>
           </div>
           <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
             <h3 className="text-xs font-extrabold uppercase mb-4 flex items-center gap-2 text-gold tracking-widest"><Phone size={14} /> بيانات المستلم</h3>
@@ -158,9 +187,26 @@ function AddShipmentModal({ onClose, onAdd }: { onClose: () => void; onAdd: (s: 
               </div>
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-bold mb-1.5 text-slate-600">ملاحظات</label>
-            <textarea placeholder="ملاحظات إضافية..." rows={2} value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} disabled={loading} className="input-field resize-none shadow-sm" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold mb-1.5 text-slate-600">صورة الشحنة (اختياري)</label>
+              <div className="flex items-center gap-2">
+                <label className="flex-1 cursor-pointer bg-white border border-slate-200 border-dashed rounded-xl px-3 py-2 flex items-center justify-center text-xs text-slate-500 hover:bg-slate-50 transition-colors">
+                  <ImageIcon size={16} className="mr-2" />
+                  {imageFile ? imageFile.name : 'اختر صورة'}
+                  <input type="file" accept="image/*" className="hidden" onChange={e => setImageFile(e.target.files?.[0] || null)} disabled={loading} />
+                </label>
+                {imageFile && (
+                  <button type="button" onClick={() => setImageFile(null)} className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold mb-1.5 text-slate-600">ملاحظات</label>
+              <textarea placeholder="ملاحظات إضافية..." rows={2} value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} disabled={loading} className="input-field resize-none shadow-sm h-[38px]" />
+            </div>
           </div>
           <div className="flex gap-3 pt-4 border-t border-slate-100">
             <button type="submit" disabled={loading} className="btn-primary flex-1 justify-center py-3 text-base shadow-md disabled:opacity-50">
@@ -175,7 +221,7 @@ function AddShipmentModal({ onClose, onAdd }: { onClose: () => void; onAdd: (s: 
 }
 
 // ====== EDIT SHIPMENT MODAL ======
-function EditShipmentModal({ shipment, onClose, onUpdate }: { shipment: Shipment; onClose: () => void; onUpdate: (s: Shipment) => void }) {
+function EditShipmentModal({ shipment, onClose, onUpdate, warehouses }: { shipment: Shipment; onClose: () => void; onUpdate: (s: Shipment) => void; warehouses: Warehouse[] }) {
   const [form, setForm] = useState({
     recipient_name: shipment.recipient_name,
     recipient_phone: shipment.recipient_phone,
@@ -185,14 +231,33 @@ function EditShipmentModal({ shipment, onClose, onUpdate }: { shipment: Shipment
     delivery_fee: String(shipment.delivery_fee || ''),
     notes: shipment.notes || '',
     status: shipment.status,
+    warehouse_id: shipment.warehouse_id || '',
   })
   const [loading, setLoading] = useState(false)
+  const [imageFile, setImageFile] = useState<File | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     const oldStatus = shipment.status
-    const updateData = {
+    let imageUrl = shipment.label_url || null // Reusing label_url or using new image_url column if needed. Wait, we added image_url to the DB! Let's assume we use image_url if available.
+    
+    // For now we will only append to updateData if image is uploaded
+    if (imageFile) {
+      try {
+        const compressedFile = await imageCompression(imageFile, { maxSizeMB: 1, maxWidthOrHeight: 1024, useWebWorker: true })
+        const fileName = `${Math.random().toString(36).substring(2)}-${compressedFile.name}`
+        const { error: uploadError } = await supabase.storage.from('shipment_images').upload(fileName, compressedFile)
+        if (!uploadError) {
+          const { data } = supabase.storage.from('shipment_images').getPublicUrl(fileName)
+          imageUrl = data.publicUrl
+        }
+      } catch (err) {
+        console.error('Image compression/upload failed', err)
+      }
+    }
+
+    const updateData: any = {
       recipient_name: form.recipient_name,
       recipient_phone: form.recipient_phone,
       governorate: form.governorate,
@@ -201,9 +266,12 @@ function EditShipmentModal({ shipment, onClose, onUpdate }: { shipment: Shipment
       delivery_fee: parseFloat(form.delivery_fee) || 0,
       notes: form.notes || null,
       status: form.status as ShipmentStatus,
+      warehouse_id: form.warehouse_id || null,
       updated_at: new Date().toISOString(),
     }
-    const { data, error } = await supabase.from('shipments').update(updateData).eq('id', shipment.id).select('*, client:clients(*)').single()
+    if (imageUrl) updateData.image_url = imageUrl
+
+    const { data, error } = await supabase.from('shipments').update(updateData).eq('id', shipment.id).select('*, client:clients(*), warehouse:warehouses(*)').single()
     if (data && !error) {
       if (oldStatus !== form.status) {
         // Log status change in status_history
@@ -292,10 +360,34 @@ function EditShipmentModal({ shipment, onClose, onUpdate }: { shipment: Shipment
               <label className="block text-xs font-bold mb-1.5 text-slate-600">كلفة التوصيل</label>
               <input type="number" value={form.delivery_fee} onChange={e => setForm(p => ({ ...p, delivery_fee: e.target.value }))} disabled={loading} className="input-field bg-white shadow-sm" />
             </div>
+            <div>
+              <label className="block text-xs font-bold mb-1.5 text-slate-600">المستودع الحالي</label>
+              <select value={form.warehouse_id} onChange={e => setForm(p => ({ ...p, warehouse_id: e.target.value }))} className="input-field bg-white shadow-sm" disabled={loading}>
+                <option value="">غير محدد</option>
+                {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+              </select>
+            </div>
           </div>
-          <div>
-            <label className="block text-xs font-bold mb-1.5 text-slate-600">ملاحظات</label>
-            <textarea rows={2} value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} disabled={loading} className="input-field resize-none shadow-sm" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold mb-1.5 text-slate-600">تحديث صورة الشحنة (اختياري)</label>
+              <div className="flex items-center gap-2">
+                <label className="flex-1 cursor-pointer bg-white border border-slate-200 border-dashed rounded-xl px-3 py-2 flex items-center justify-center text-xs text-slate-500 hover:bg-slate-50 transition-colors">
+                  <ImageIcon size={16} className="mr-2" />
+                  {imageFile ? imageFile.name : 'اختر صورة جديدة'}
+                  <input type="file" accept="image/*" className="hidden" onChange={e => setImageFile(e.target.files?.[0] || null)} disabled={loading} />
+                </label>
+                {imageFile && (
+                  <button type="button" onClick={() => setImageFile(null)} className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors">
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold mb-1.5 text-slate-600">ملاحظات</label>
+              <textarea rows={2} value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} disabled={loading} className="input-field resize-none shadow-sm h-[38px]" />
+            </div>
           </div>
           <div className="flex gap-3 pt-4 border-t border-slate-100">
             <button type="submit" disabled={loading} className="btn-primary flex-1 justify-center py-3 shadow-md bg-blue-600 hover:bg-blue-700 disabled:opacity-50">
@@ -403,15 +495,22 @@ export default function ShipmentsPage() {
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 20
 
-  const fetchShipments = useCallback(async () => {
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([])
+  const [warehouseFilter, setWarehouseFilter] = useState('all')
+
+  const fetchShipmentsAndWarehouses = useCallback(async () => {
     setLoading(true)
-    const { data, error } = await supabase.from('shipments').select('*, client:clients(*)').order('created_at', { ascending: false })
-    if (data) setShipments(data as unknown as Shipment[])
-    if (error) console.error(error)
+    const [shipmentsRes, warehousesRes] = await Promise.all([
+      supabase.from('shipments').select('*, client:clients(*), warehouse:warehouses(*)').order('created_at', { ascending: false }),
+      supabase.from('warehouses').select('*')
+    ])
+    if (shipmentsRes.data) setShipments(shipmentsRes.data as unknown as Shipment[])
+    if (warehousesRes.data) setWarehouses(warehousesRes.data as Warehouse[])
+    if (shipmentsRes.error) console.error(shipmentsRes.error)
     setLoading(false)
   }, [])
 
-  useEffect(() => { fetchShipments() }, [fetchShipments])
+  useEffect(() => { fetchShipmentsAndWarehouses() }, [fetchShipmentsAndWarehouses])
 
   const handleDelete = async (id: string, code: string) => {
     if(!confirm('هل أنت متأكد من حذف هذه الشحنة؟')) return
@@ -431,9 +530,10 @@ export default function ShipmentsPage() {
       s.recipient_phone?.includes(search)
     const matchStatus = statusFilter === 'all' || s.status === statusFilter
     const matchGov = governorateFilter === 'all' || s.governorate === governorateFilter
+    const matchWarehouse = warehouseFilter === 'all' || s.warehouse_id === warehouseFilter
     const matchFrom = !dateFrom || new Date(s.created_at) >= new Date(dateFrom)
     const matchTo = !dateTo || new Date(s.created_at) <= new Date(dateTo + 'T23:59:59')
-    return matchSearch && matchStatus && matchGov && matchFrom && matchTo
+    return matchSearch && matchStatus && matchGov && matchWarehouse && matchFrom && matchTo
   })
 
   const totalPages = Math.ceil(filteredShipments.length / PAGE_SIZE)
@@ -475,6 +575,10 @@ export default function ShipmentsPage() {
                 <option value="all">كل المحافظات</option>
                 {IRAQI_GOVERNORATES.map(g => <option key={g} value={g}>{g}</option>)}
               </select>
+              <select value={warehouseFilter} onChange={e => { setWarehouseFilter(e.target.value); setPage(1) }} className="input-field w-full sm:w-40 shadow-sm font-semibold flex-1">
+                <option value="all">المكان (الكل)</option>
+                {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+              </select>
             </div>
           </div>
           {/* Date Filters */}
@@ -495,12 +599,12 @@ export default function ShipmentsPage() {
               </div>
             )}
             <div className="mr-auto flex gap-2">
-              {(search || statusFilter !== 'all' || governorateFilter !== 'all' || dateFrom || dateTo) && (
-                <button onClick={() => { setSearch(''); setStatusFilter('all'); setGovernorateFilter('all'); setDateFrom(''); setDateTo(''); setPage(1) }} className="btn-ghost py-2 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 border-red-100">
+              {(search || statusFilter !== 'all' || governorateFilter !== 'all' || warehouseFilter !== 'all' || dateFrom || dateTo) && (
+                <button onClick={() => { setSearch(''); setStatusFilter('all'); setGovernorateFilter('all'); setWarehouseFilter('all'); setDateFrom(''); setDateTo(''); setPage(1) }} className="btn-ghost py-2 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 border-red-100">
                   <X size={14} /> مسح الكل
                 </button>
               )}
-              <button onClick={fetchShipments} className="btn-ghost py-2 text-xs gap-1.5 shadow-sm">
+              <button onClick={fetchShipmentsAndWarehouses} className="btn-ghost py-2 text-xs gap-1.5 shadow-sm">
                 <RefreshCw size={14} className={`text-slate-500 ${loading ? 'animate-spin' : ''}`} /> تحديث
               </button>
             </div>
@@ -520,6 +624,7 @@ export default function ShipmentsPage() {
                 <th>الرقم</th>
                 <th>المستلم</th>
                 <th>العميل</th>
+                <th>المكان الحالي</th>
                 <th>الحالة</th>
                 <th>المدفوعات</th>
                 <th>التاريخ</th>
@@ -528,10 +633,10 @@ export default function ShipmentsPage() {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={8} className="text-center py-20"><Loader2 size={32} className="mx-auto text-gold animate-spin" /></td></tr>
+                <tr><td colSpan={9} className="text-center py-20"><Loader2 size={32} className="mx-auto text-gold animate-spin" /></td></tr>
               ) : pagedShipments.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="text-center py-16 text-slate-400">
+                  <td colSpan={9} className="text-center py-16 text-slate-400">
                     <Package size={48} className="mx-auto mb-4 text-slate-300" />
                     <p className="font-semibold text-lg text-slate-500">لا توجد شحنات مطابقة</p>
                     <p className="text-sm">قم بتغيير فلاتر البحث أو أضف شحنة جديدة</p>
@@ -556,13 +661,20 @@ export default function ShipmentsPage() {
                     </div>
                   </td>
                   <td>
-                    <div className="text-sm space-y-1">
-                      <div className="font-bold text-slate-800">{s.client?.name}</div>
-                      <div className="text-slate-400 text-xs font-mono">{s.client?.code}</div>
-                    </div>
+                    <div className="font-bold text-slate-800 text-sm">{s.client?.name || '—'}</div>
+                    <div className="text-xs text-slate-500 font-mono" dir="ltr">{s.client?.code || ''}</div>
                   </td>
                   <td>
-                    <span className={`badge ${getStatusClass(s.status)} shadow-sm`}>
+                    {s.warehouse ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-bold bg-orange-50 text-orange-700 px-2 py-1 rounded border border-orange-100">
+                        <WarehouseIcon size={12} /> {s.warehouse.name}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-400 font-medium">—</span>
+                    )}
+                  </td>
+                  <td>
+                    <span className={`badge ${getStatusClass(s.status)} shadow-sm whitespace-nowrap`}>
                       <span className="w-2 h-2 rounded-full bg-current opacity-75" />
                       {getStatusLabel(s.status)}
                     </span>
@@ -623,8 +735,8 @@ export default function ShipmentsPage() {
         </div>
       </div>
 
-      {showAddModal && <AddShipmentModal onClose={() => setShowAddModal(false)} onAdd={s => setShipments(prev => [s, ...prev])} />}
-      {editingShipment && <EditShipmentModal shipment={editingShipment} onClose={() => setEditingShipment(null)} onUpdate={updated => setShipments(p => p.map(s => s.id === updated.id ? updated : s))} />}
+      {showAddModal && <AddShipmentModal onClose={() => setShowAddModal(false)} onAdd={s => { setShipments([s, ...shipments]); setPage(1) }} warehouses={warehouses} />}
+      {editingShipment && <EditShipmentModal shipment={editingShipment} onClose={() => setEditingShipment(null)} onUpdate={s => setShipments(shipments.map(x => x.id === s.id ? s : x))} warehouses={warehouses} />}
       {viewingShipment && <ViewShipmentModal shipment={viewingShipment} onClose={() => setViewingShipment(null)} />}
     </div>
   )
