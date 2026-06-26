@@ -93,7 +93,7 @@ function AddShipmentModal({ onClose, onAdd, warehouses }: { onClose: () => void;
       client_id: form.client_id,
       tracking_number: form.tracking_number,
       type: form.type,
-      warehouse_id: form.warehouse_id || null,
+      warehouse_id: form.warehouse_id && form.warehouse_id !== 'none' ? form.warehouse_id : null,
       notes: form.notes,
       status: 'new',
       label_url: imageUrl, // Storing in label_url since it's the image field in this project
@@ -104,7 +104,7 @@ function AddShipmentModal({ onClose, onAdd, warehouses }: { onClose: () => void;
       amount: 0,
       delivery_fee: 0,
     }
-    const { data, error } = await supabase.from('shipments').insert([newShipmentData]).select('*, client:clients(*), warehouse:warehouses(*)').single()
+    const { data, error } = await supabase.from('shipments').insert([newShipmentData]).select('*, client:clients(*)').single()
     
     if (data && !error) {
       await logActivity('إنشاء شحنة سريع', 'shipment', data.code, `تم إنشاء شحنة جديدة (سريعة): ${data.code}`)
@@ -345,12 +345,12 @@ function EditShipmentModal({ shipment, onClose, onUpdate, warehouses }: { shipme
       type: form.type,
       notes: form.notes || null,
       status: form.status as ShipmentStatus,
-      warehouse_id: form.warehouse_id || null,
+      warehouse_id: form.warehouse_id && form.warehouse_id !== 'none' ? form.warehouse_id : null,
       updated_at: new Date().toISOString(),
     }
     if (imageUrl) updateData.image_url = imageUrl
 
-    const { data, error } = await supabase.from('shipments').update(updateData).eq('id', shipment.id).select('*, client:clients(*), warehouse:warehouses(*)').single()
+    const { data, error } = await supabase.from('shipments').update(updateData).eq('id', shipment.id).select('*, client:clients(*)').single()
     if (data && !error) {
       if (oldStatus !== form.status) {
         // Log status change in status_history
