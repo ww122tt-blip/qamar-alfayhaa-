@@ -279,21 +279,32 @@ function EditShipmentModal({ shipment, onClose, onUpdate, warehouses }: { shipme
         await logActivity('تحديث حالة', 'shipment', shipment.code || shipment.id, `تغيير حالة ${shipment.code} من "${getStatusLabel(oldStatus)}" إلى "${getStatusLabel(form.status as ShipmentStatus)}"`)
         await addNotification('تحديث حالة شحنة', `تم تغيير حالة الشحنة ${shipment.code} إلى: ${getStatusLabel(form.status as ShipmentStatus)}`, 'shipment', shipment.code)
         
-        // WhatsApp Notification
-        const { data: settings } = await supabase.from('whatsapp_settings').select('notify_status_change').single()
-        if (settings?.notify_status_change && data.client?.phones?.[0]) {
-          const statusName = getStatusLabel(form.status as ShipmentStatus)
-          let msg = `تحديث شحنتك #${data.code || shipment.id.slice(0,8)} 🔄\n\n📊 الحالة الجديدة: ${statusName}\n👤 المستلم: ${form.recipient_name}\n\n`
-          
-          if (form.status === 'delivered') {
-            msg = `🎉 تم تسليم شحنتك بنجاح!\n\n📦 الشحنة: #${data.code || shipment.id.slice(0,8)}\n👤 المستلم: ${form.recipient_name}\n💰 المبلغ المحصّل: ${formatCurrency(data.amount)}\n\nشكراً لثقتكم بقمر الفيحاء 🌙`
-          } else if (form.status === 'returned') {
-            msg = `⚠️ تم إرجاع شحنتك\n\n📦 الشحنة: #${data.code || shipment.id.slice(0,8)}\n👤 المستلم: ${form.recipient_name}\n\nللاستفسار يرجى التواصل معنا.\nقمر الفيحاء 🌙`
-          } else {
-            msg += `🔗 تتبع شحنتك عبر بوابتك:\n${window.location.origin}/client-stats/${data.client_id}\n\nقمر الفيحاء للشحنات 🌙`
+        // ❤️ AUTO-SEND TO WASEET when status changes to at_waseet_office
+        if (form.status === 'at_waseet_office' && !shipment.waseet_qr_id) {
+          fetch('/api/waseet', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'send_shipment', shipmentId: shipment.id }),
+          }).catch(err => console.error('[Waseet] Auto-send failed:', err))
+        }
+
+        // WhatsApp Notification (only if not going to waseet - waseet will handle its own notifications)
+        if (form.status !== 'at_waseet_office' || shipment.waseet_qr_id) {
+          const { data: settings } = await supabase.from('whatsapp_settings').select('notify_status_change').single()
+          if (settings?.notify_status_change && data.client?.phones?.[0]) {
+            const statusName = getStatusLabel(form.status as ShipmentStatus)
+            let msg = `تحديث شحنتك #${data.code || shipment.id.slice(0,8)} 🔄\n\n📊 الحالة الجديدة: ${statusName}\n👤 المستلم: ${form.recipient_name}\n\n`
+            
+            if (form.status === 'delivered') {
+              msg = `🎉 تم تسليم شحنتك بنجاح!\n\n📦 الشحنة: #${data.code || shipment.id.slice(0,8)}\n👤 المستلم: ${form.recipient_name}\n💰 المبلغ المحصّل: ${formatCurrency(data.amount)}\n\nشكراً لثقتكم بقمر الفيحاء 🌙`
+            } else if (form.status === 'returned') {
+              msg = `⚠️ تم إرجاع شحنتك\n\n📦 الشحنة: #${data.code || shipment.id.slice(0,8)}\n👤 المستلم: ${form.recipient_name}\n\nللاستفسار يرجى التواصل معنا.\nقمر الفيحاء 🌙`
+            } else {
+              msg += `🔗 تتبع شحنتك عبر بوابتك:\n${window.location.origin}/client-stats/${data.client_id}\n\nقمر الفيحاء للشحنات 🌙`
+            }
+            
+            await sendWhatsAppMessage(data.client.phones[0], msg, shipment.id)
           }
-          
-          await sendWhatsAppMessage(data.client.phones[0], msg, shipment.id)
         }
       }
       onUpdate(data as unknown as Shipment)
@@ -320,18 +331,31 @@ function EditShipmentModal({ shipment, onClose, onUpdate, warehouses }: { shipme
           <button onClick={onClose} disabled={loading} className="btn-ghost p-2 rounded-lg hover:bg-slate-200 text-slate-500"><X size={18} /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {/* Status Change */}
-          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-            <label className="block text-xs font-extrabold uppercase mb-3 text-gold tracking-widest">تغيير الحالة</label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {STATUS_STEPS.map(s => (
-                <button key={s.value} type="button" onClick={() => setForm(p => ({ ...p, status: s.value }))}
-                  className={`p-2 rounded-xl text-xs font-bold border transition-all ${form.status === s.value ? 'text-white border-transparent shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
-                  style={form.status === s.value ? { background: s.color, borderColor: s.color } : {}}>
-                  {s.label}
-                </button>
-              ))}
+          {/* Status Change - LOCKED if shipment is with Waseet */}
+          <div className={`p-4 rounded-2xl border ${shipment.waseet_qr_id ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-100'}`}>
+            <div className="flex items-center justify-between mb-3">
+              <label className="block text-xs font-extrabold uppercase text-gold tracking-widest">تغيير الحالة</label>
+              {shipment.waseet_qr_id && (
+                <span className="flex items-center gap-1.5 text-xs font-bold bg-amber-100 text-amber-700 px-3 py-1 rounded-full border border-amber-200">
+                  <Truck size={12} /> يتحكم بها الوسيط • QR: {shipment.waseet_qr_id}
+                </span>
+              )}
             </div>
+            {shipment.waseet_qr_id ? (
+              <p className="text-xs text-amber-700 font-medium bg-amber-100 px-4 py-3 rounded-xl border border-amber-200">
+                🔒 هذه الشحنة مع شركة الوسيط. يتم تحديث حالتها تلقائياً من الوسيط كل 30 دقيقة ولا يمكن تغييرها يدوياً.
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {STATUS_STEPS.map(s => (
+                  <button key={s.value} type="button" onClick={() => setForm(p => ({ ...p, status: s.value }))}
+                    className={`p-2 rounded-xl text-xs font-bold border transition-all ${form.status === s.value ? 'text-white border-transparent shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
+                    style={form.status === s.value ? { background: s.color, borderColor: s.color } : {}}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
