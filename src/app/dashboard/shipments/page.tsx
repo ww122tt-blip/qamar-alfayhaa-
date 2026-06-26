@@ -50,9 +50,11 @@ async function addNotification(title: string, content: string, type: string, ent
 function AddShipmentModal({ onClose, onAdd, warehouses }: { onClose: () => void; onAdd: (s: Shipment) => void; warehouses: Warehouse[] }) {
   const [clients, setClients] = useState<Client[]>([])
   const [form, setForm] = useState({
-    client_id: '', recipient_name: '', recipient_phone: '',
-    governorate: '', district: '', weight: '', item_price: '',
-    delivery_fee: '5000', cod_amount: '', notes: '', warehouse_id: ''
+    client_id: '',
+    tracking_number: '',
+    warehouse_id: '',
+    type: 'per_order' as PricingType,
+    notes: ''
   })
   const [loading, setLoading] = useState(false)
   const [imageFile, setImageFile] = useState<File | null>(null)
@@ -65,49 +67,47 @@ function AddShipmentModal({ onClose, onAdd, warehouses }: { onClose: () => void;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!form.client_id) return alert('يجب اختيار العميل')
+    if (!imageFile) return alert('يجب رفع صورة واحدة للشحنة')
+    
     setLoading(true)
     
     let imageUrl = null
-    if (imageFile) {
-      try {
-        const compressedFile = await imageCompression(imageFile, { maxSizeMB: 1, maxWidthOrHeight: 1024, useWebWorker: true })
-        const fileName = `${Math.random().toString(36).substring(2)}-${compressedFile.name}`
-        const { error: uploadError } = await supabase.storage.from('shipment_images').upload(fileName, compressedFile)
-        if (!uploadError) {
-          const { data } = supabase.storage.from('shipment_images').getPublicUrl(fileName)
-          imageUrl = data.publicUrl
-        }
-      } catch (err) {
-        console.error('Image compression/upload failed', err)
+    try {
+      const compressedFile = await imageCompression(imageFile, { maxSizeMB: 1, maxWidthOrHeight: 1024, useWebWorker: true })
+      const fileName = `${Math.random().toString(36).substring(2)}-${compressedFile.name}`
+      const { error: uploadError } = await supabase.storage.from('shipment_images').upload(fileName, compressedFile)
+      if (!uploadError) {
+        const { data } = supabase.storage.from('shipment_images').getPublicUrl(fileName)
+        imageUrl = data.publicUrl
       }
+    } catch (err) {
+      console.error('Image compression/upload failed', err)
+      alert('فشل رفع الصورة')
+      setLoading(false)
+      return
     }
 
     const newShipmentData = {
       code: generateShipmentNumber(Math.floor(Math.random() * 9999)),
       client_id: form.client_id,
-      recipient_name: form.recipient_name,
-      recipient_phone: form.recipient_phone,
-      governorate: form.governorate,
-      district: form.district || null,
-      amount: parseFloat(form.item_price) || 0,
-      delivery_fee: parseFloat(form.delivery_fee) || 5000,
+      tracking_number: form.tracking_number,
+      type: form.type,
+      warehouse_id: form.warehouse_id || null,
       notes: form.notes,
       status: 'new',
-      warehouse_id: form.warehouse_id || null,
-      image_url: imageUrl
+      label_url: imageUrl, // Storing in label_url since it's the image field in this project
+      // Default empty values for now, to be filled in Edit
+      recipient_name: null,
+      recipient_phone: null,
+      governorate: null,
+      amount: 0,
+      delivery_fee: 0,
     }
     const { data, error } = await supabase.from('shipments').insert([newShipmentData]).select('*, client:clients(*), warehouse:warehouses(*)').single()
+    
     if (data && !error) {
-      await logActivity('إنشاء شحنة', 'shipment', data.code, `تم إنشاء شحنة جديدة: ${data.code} للمستلم ${form.recipient_name}`)
-      await addNotification('شحنة جديدة', `تم إنشاء الشحنة ${data.code}`, 'shipment', data.code)
-      
-      // WhatsApp Notification
-      const { data: settings } = await supabase.from('whatsapp_settings').select('notify_new_shipment').single()
-      if (settings?.notify_new_shipment && data.client?.phones?.[0]) {
-        const msg = `مرحباً ${data.client.name} 👋\nتم استلام شحنتك بنجاح!\n\n📦 رقم الشحنة: #${data.code}\n👤 المستلم: ${form.recipient_name}\n📍 المحافظة: ${form.governorate}\n💰 المبلغ: ${formatCurrency(data.amount)}\n\n🔗 تتبع شحنتك: ${window.location.origin}/client-stats/${data.client_id}\n\nقمر الفيحاء للشحنات 🌙`
-        await sendWhatsAppMessage(data.client.phones[0], msg, data.id)
-      }
-
+      await logActivity('إنشاء شحنة سريع', 'shipment', data.code, `تم إنشاء شحنة جديدة (سريعة): ${data.code}`)
       onAdd(data as unknown as Shipment)
       onClose()
     } else {
@@ -118,101 +118,127 @@ function AddShipmentModal({ onClose, onAdd, warehouses }: { onClose: () => void;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay">
-      <div className="glass-card w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-fade-in shadow-2xl">
-        <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-slate-50/50">
+      <div className="glass-card w-full max-w-3xl max-h-[90vh] overflow-y-auto animate-fade-in shadow-2xl bg-[#1e1e1e] border border-slate-700/50">
+        
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-slate-700/50">
+          <button onClick={onClose} disabled={loading} className="w-10 h-10 flex items-center justify-center rounded-xl bg-slate-800 text-slate-400 hover:text-white hover:bg-red-500/20 hover:border-red-500/50 border border-slate-700 transition-colors">
+            <X size={20} />
+          </button>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white shadow-sm border border-slate-200">
-              <Plus size={20} className="text-gold" />
-            </div>
-            <h2 className="text-lg font-extrabold text-slate-800">إضافة شحنة جديدة</h2>
+            <h2 className="text-xl font-bold text-white">إضافة شحنة جديدة</h2>
+            <Truck size={24} className="text-red-500" />
           </div>
-          <button onClick={onClose} disabled={loading} className="btn-ghost p-2 rounded-lg hover:bg-slate-200 text-slate-500"><X size={18} /></button>
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-bold mb-2 text-slate-700">العميل المرسل *</label>
-              <select required value={form.client_id} onChange={e => setForm(p => ({ ...p, client_id: e.target.value }))} className="input-field bg-white shadow-sm" disabled={loading}>
-                <option value="">اختر العميل...</option>
-                {clients.map(c => <option key={c.id} value={c.id}>{c.name} - {c.code}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-bold mb-2 text-slate-700">المستودع (المكان الحالي)</label>
-              <select value={form.warehouse_id} onChange={e => setForm(p => ({ ...p, warehouse_id: e.target.value }))} className="input-field bg-white shadow-sm" disabled={loading}>
-                <option value="">غير محدد</option>
-                {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-            <h3 className="text-xs font-extrabold uppercase mb-4 flex items-center gap-2 text-gold tracking-widest"><Phone size={14} /> بيانات المستلم</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold mb-1.5 text-slate-600">اسم المستلم *</label>
-                <input type="text" placeholder="الاسم الكامل" required value={form.recipient_name} onChange={e => setForm(p => ({ ...p, recipient_name: e.target.value }))} disabled={loading} className="input-field bg-white shadow-sm" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold mb-1.5 text-slate-600">هاتف المستلم *</label>
-                <input type="tel" placeholder="07XXXXXXXX" required value={form.recipient_phone} onChange={e => setForm(p => ({ ...p, recipient_phone: e.target.value }))} disabled={loading} className="input-field bg-white shadow-sm" />
+
+        <form onSubmit={handleSubmit} className="p-8 space-y-8">
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Tracking Number */}
+            <div className="space-y-2" dir="rtl">
+              <div className="relative">
+                <input 
+                  type="text" 
+                  value={form.tracking_number}
+                  onChange={e => setForm(p => ({ ...p, tracking_number: e.target.value }))}
+                  className="w-full bg-[#2a2a2a] border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none text-right" 
+                  placeholder="* رقم التتبع"
+                />
               </div>
             </div>
-          </div>
-          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-            <h3 className="text-xs font-extrabold uppercase mb-4 flex items-center gap-2 text-gold tracking-widest"><MapPin size={14} /> العنوان</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold mb-1.5 text-slate-600">المحافظة *</label>
-                <select required value={form.governorate} onChange={e => setForm(p => ({ ...p, governorate: e.target.value }))} disabled={loading} className="input-field bg-white shadow-sm">
-                  <option value="">اختر المحافظة</option>
-                  {IRAQI_GOVERNORATES.map(g => <option key={g} value={g}>{g}</option>)}
+
+            {/* Client */}
+            <div className="space-y-2" dir="rtl">
+              <div className="relative">
+                <select 
+                  required 
+                  value={form.client_id} 
+                  onChange={e => setForm(p => ({ ...p, client_id: e.target.value }))} 
+                  className={`w-full bg-[#2a2a2a] border ${!form.client_id ? 'border-red-500' : 'border-slate-700'} rounded-xl px-4 py-3 text-white focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none text-right appearance-none`}
+                >
+                  <option value="" disabled>* العميل</option>
+                  {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <ChevronDown size={16} className="text-slate-400" />
+                </div>
               </div>
-              <div>
-                <label className="block text-xs font-bold mb-1.5 text-slate-600">المنطقة</label>
-                <input type="text" placeholder="المنطقة / الحي" value={form.district} onChange={e => setForm(p => ({ ...p, district: e.target.value }))} disabled={loading} className="input-field bg-white shadow-sm" />
+              {!form.client_id && <p className="text-red-500 text-xs mt-1 text-right">يجب اختيار العميل</p>}
+            </div>
+
+            {/* Warehouse */}
+            <div className="space-y-2" dir="rtl">
+              <div className="relative">
+                <select 
+                  value={form.warehouse_id} 
+                  onChange={e => setForm(p => ({ ...p, warehouse_id: e.target.value }))} 
+                  className="w-full bg-[#2a2a2a] border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none text-right appearance-none"
+                >
+                  <option value="" disabled>* المستودع</option>
+                  <option value="none">بدون مستودع</option>
+                  {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </select>
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <ChevronDown size={16} className="text-slate-400" />
+                </div>
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <WarehouseIcon size={18} className="text-slate-400" />
+                </div>
+              </div>
+            </div>
+
+            {/* Shipment Type */}
+            <div className="space-y-2" dir="rtl">
+              <div className="relative">
+                <select 
+                  value={form.type} 
+                  onChange={e => setForm(p => ({ ...p, type: e.target.value as PricingType }))} 
+                  className="w-full bg-[#2a2a2a] border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none text-right appearance-none"
+                >
+                  <option value="per_order">بالطلب (Per Order)</option>
+                  <option value="per_kg">بالوزن / الكيلو</option>
+                  <option value="carton">بالكارتون (Carton)</option>
+                  <option value="bag">بالكيس (Bag)</option>
+                </select>
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                  <ChevronDown size={16} className="text-slate-400" />
+                </div>
               </div>
             </div>
           </div>
-          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-            <h3 className="text-xs font-extrabold uppercase mb-4 flex items-center gap-2 text-gold tracking-widest"><DollarSign size={14} /> التسعير</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold mb-1.5 text-slate-600">قيمة البضاعة *</label>
-                <input type="number" placeholder="0" required value={form.item_price} onChange={e => setForm(p => ({ ...p, item_price: e.target.value }))} disabled={loading} className="input-field bg-white shadow-sm" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold mb-1.5 text-slate-600">كلفة التوصيل *</label>
-                <input type="number" placeholder="5000" required value={form.delivery_fee} onChange={e => setForm(p => ({ ...p, delivery_fee: e.target.value }))} disabled={loading} className="input-field bg-white shadow-sm" />
-              </div>
+
+          {/* Image Upload Area */}
+          <div className="space-y-2 mt-8">
+            <div className="relative">
+              <label className={`w-full flex flex-col items-center justify-center h-32 bg-[#2a2a2a] border-2 border-dashed ${!imageFile ? 'border-red-500/50' : 'border-slate-700'} rounded-xl cursor-pointer hover:bg-[#333] transition-colors`}>
+                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                  {imageFile ? (
+                    <span className="text-white font-medium">{imageFile.name}</span>
+                  ) : (
+                    <div className="flex gap-4 text-red-500/80">
+                      <ImageIcon size={24} />
+                      <div className="flex gap-1"><span className="w-1.5 h-4 bg-red-500/80 rounded-full"></span><span className="w-1 h-4 bg-red-500/80 rounded-full"></span></div>
+                    </div>
+                  )}
+                </div>
+                <input type="file" accept="image/*" className="hidden" onChange={e => setImageFile(e.target.files?.[0] || null)} disabled={loading} />
+              </label>
             </div>
+            {!imageFile && <p className="text-red-500 text-xs text-right">يجب رفع صورة واحدة للشحنة</p>}
+            <p className="text-slate-400 text-xs text-right mt-3 leading-relaxed">
+              أنواع الملفات المدعومة: JPEG, PNG, JPG, WEBP - سيتم ضغط الصورة تلقائياً إلى أقل من 2MB (حد أقصى 50MB)<br/>
+              ملفات PNG الكبيرة سيتم تحويلها إلى JPEG لضغط أفضل
+            </p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold mb-1.5 text-slate-600">صورة الشحنة (اختياري)</label>
-              <div className="flex items-center gap-2">
-                <label className="flex-1 cursor-pointer bg-white border border-slate-200 border-dashed rounded-xl px-3 py-2 flex items-center justify-center text-xs text-slate-500 hover:bg-slate-50 transition-colors">
-                  <ImageIcon size={16} className="mr-2" />
-                  {imageFile ? imageFile.name : 'اختر صورة'}
-                  <input type="file" accept="image/*" className="hidden" onChange={e => setImageFile(e.target.files?.[0] || null)} disabled={loading} />
-                </label>
-                {imageFile && (
-                  <button type="button" onClick={() => setImageFile(null)} className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors">
-                    <X size={16} />
-                  </button>
-                )}
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-bold mb-1.5 text-slate-600">ملاحظات</label>
-              <textarea placeholder="ملاحظات إضافية..." rows={2} value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} disabled={loading} className="input-field resize-none shadow-sm h-[38px]" />
-            </div>
-          </div>
-          <div className="flex gap-3 pt-4 border-t border-slate-100">
-            <button type="submit" disabled={loading} className="btn-primary flex-1 justify-center py-3 text-base shadow-md disabled:opacity-50">
-              {loading ? <Loader2 size={18} className="animate-spin" /> : <Package size={18} />} إضافة الشحنة
+
+          <div className="flex justify-between pt-6 border-t border-slate-700/50">
+             <button type="button" onClick={onClose} disabled={loading} className="px-8 py-3 rounded-xl border border-slate-600 text-white hover:bg-slate-700 transition-colors">
+              إلغاء
             </button>
-            <button type="button" onClick={onClose} disabled={loading} className="btn-ghost flex-1 justify-center py-3 text-base">إلغاء</button>
+            <button type="submit" disabled={loading} className="px-8 py-3 rounded-xl bg-red-400 hover:bg-red-500 text-white font-bold transition-colors flex items-center gap-2">
+              {loading && <Loader2 size={16} className="animate-spin" />}
+              حفظ الشحنة
+            </button>
           </div>
         </form>
       </div>
@@ -223,26 +249,77 @@ function AddShipmentModal({ onClose, onAdd, warehouses }: { onClose: () => void;
 // ====== EDIT SHIPMENT MODAL ======
 function EditShipmentModal({ shipment, onClose, onUpdate, warehouses }: { shipment: Shipment; onClose: () => void; onUpdate: (s: Shipment) => void; warehouses: Warehouse[] }) {
   const [form, setForm] = useState({
-    recipient_name: shipment.recipient_name,
-    recipient_phone: shipment.recipient_phone,
-    governorate: shipment.governorate,
+    recipient_name: shipment.recipient_name || '',
+    recipient_phone: shipment.recipient_phone || '',
+    governorate: shipment.governorate || 'البصرة',
     district: shipment.district || '',
-    amount: String(shipment.amount || ''),
-    delivery_fee: String(shipment.delivery_fee || ''),
+    weight: shipment.weight ? String(shipment.weight) : '',
+    amount: shipment.amount ? String(shipment.amount) : '',
+    delivery_fee: shipment.delivery_fee ? String(shipment.delivery_fee) : '',
     notes: shipment.notes || '',
     status: shipment.status,
+    type: shipment.type || 'per_order',
     warehouse_id: shipment.warehouse_id || '',
   })
   const [loading, setLoading] = useState(false)
   const [imageFile, setImageFile] = useState<File | null>(null)
+  const [settings, setSettings] = useState<Record<string, number>>({})
+
+  // Fetch Settings on mount
+  useEffect(() => {
+    supabase.from('settings').select('*').then(({ data }) => {
+      if (data) {
+        const s: Record<string, number> = {}
+        data.forEach(x => { if (x.type === 'number') s[x.key] = Number(x.value) })
+        setSettings(s)
+      }
+    })
+  }, [])
+
+  // Auto-calculate Delivery Fee when relevant fields change
+  useEffect(() => {
+    if (Object.keys(settings).length === 0) return
+
+    const weight = parseFloat(form.weight) || 0
+    let localDelivery = settings.governorates_delivery_price || 8000
+    if (form.governorate === 'البصرة') localDelivery = settings.basra_delivery_price || 5000
+    if (form.governorate === 'بغداد') localDelivery = settings.baghdad_delivery_price || 4000
+
+    const client = shipment.client
+    const defaultCarton = settings.default_carton_price || 30000
+    const defaultBag = settings.default_bag_price || 15000
+    const defaultKilo = settings.default_kilo_price || 1000
+
+    const cartonPrice = client?.carton_price || defaultCarton
+    const bagPrice = client?.bag_price || defaultBag
+    const kiloPrice = client?.kilo_price || defaultKilo
+
+    let finalFee = 0
+
+    if (form.type === 'carton') {
+      finalFee = cartonPrice + localDelivery
+    } else if (form.type === 'bag') {
+      finalFee = bagPrice + localDelivery
+    } else if (form.type === 'per_kg') {
+      finalFee = (weight * kiloPrice) + localDelivery
+    } else if (form.type === 'per_order') {
+      if (weight > 8) {
+        finalFee = cartonPrice + localDelivery
+      } else {
+        finalFee = (weight * kiloPrice) + localDelivery
+      }
+    }
+
+    // Only update if it's different and if it's not a manual override (we can just auto-update it always for now)
+    setForm(p => ({ ...p, delivery_fee: String(finalFee) }))
+  }, [form.weight, form.type, form.governorate, settings, shipment.client])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     const oldStatus = shipment.status
-    let imageUrl = shipment.label_url || null // Reusing label_url or using new image_url column if needed. Wait, we added image_url to the DB! Let's assume we use image_url if available.
+    let imageUrl = shipment.label_url || null 
     
-    // For now we will only append to updateData if image is uploaded
     if (imageFile) {
       try {
         const compressedFile = await imageCompression(imageFile, { maxSizeMB: 1, maxWidthOrHeight: 1024, useWebWorker: true })
@@ -264,6 +341,8 @@ function EditShipmentModal({ shipment, onClose, onUpdate, warehouses }: { shipme
       district: form.district || null,
       amount: parseFloat(form.amount) || 0,
       delivery_fee: parseFloat(form.delivery_fee) || 0,
+      weight: parseFloat(form.weight) || 0,
+      type: form.type,
       notes: form.notes || null,
       status: form.status as ShipmentStatus,
       warehouse_id: form.warehouse_id || null,
@@ -365,6 +444,19 @@ function EditShipmentModal({ shipment, onClose, onUpdate, warehouses }: { shipme
             <div>
               <label className="block text-xs font-bold mb-1.5 text-slate-600">هاتف المستلم</label>
               <input type="tel" value={form.recipient_phone} onChange={e => setForm(p => ({ ...p, recipient_phone: e.target.value }))} disabled={loading} className="input-field bg-white shadow-sm" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold mb-1.5 text-slate-600">نوع الشحنة</label>
+              <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value as PricingType }))} disabled={loading} className="input-field bg-white shadow-sm">
+                <option value="per_order">بالطلب (Per Order)</option>
+                <option value="per_kg">بالوزن / الكيلو</option>
+                <option value="carton">بالكارتون (Carton)</option>
+                <option value="bag">بالكيس (Bag)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold mb-1.5 text-slate-600">الوزن / العدد</label>
+              <input type="number" step="0.1" placeholder="مثال: 10 كغم" value={form.weight} onChange={e => setForm(p => ({ ...p, weight: e.target.value }))} disabled={loading} className="input-field bg-white shadow-sm" />
             </div>
             <div>
               <label className="block text-xs font-bold mb-1.5 text-slate-600">المحافظة</label>

@@ -12,7 +12,7 @@ export type ShipmentStatus =
   | 'failed_delivery'
   | 'cancelled'
 
-export type PricingType = 'per_order' | 'per_kg'
+export type PricingType = 'per_order' | 'per_kg' | 'carton' | 'bag'
 
 export type UserRole = 'admin' | 'manager' | 'employee'
 
@@ -43,6 +43,9 @@ export interface Client {
   district?: string
   pricing_type: PricingType
   delivery_price: number
+  carton_price?: number
+  bag_price?: number
+  kilo_price?: number
   notes?: string
   is_active: boolean
   created_by?: string
@@ -79,14 +82,14 @@ export interface Shipment {
   code: string // alternative code field
   client_id: string
   client?: Client
-  recipient_name: string
-  recipient_phone: string
-  governorate: string
+  recipient_name?: string
+  recipient_phone?: string
+  governorate?: string
   district?: string
   weight?: number
-  item_price: number
-  delivery_fee: number
-  cod_amount: number
+  item_price?: number
+  delivery_fee?: number
+  cod_amount?: number
   status: ShipmentStatus
   waseet_id?: string
   waseet_status?: string
@@ -97,7 +100,7 @@ export interface Shipment {
   notes?: string
   tracking_number?: string
   label_url?: string
-  type?: string
+  type?: PricingType
   amount?: number
   delivery_price?: number
   created_by?: string
