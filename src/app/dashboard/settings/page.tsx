@@ -1,6 +1,6 @@
 'use client'
 
-import { Settings, Globe, CreditCard, Layers, MessageSquare, ChevronLeft } from 'lucide-react'
+import { Settings, Globe, CreditCard, Layers, MessageSquare, ChevronLeft, Truck } from 'lucide-react'
 import Link from 'next/link'
 
 const settingsSections = [
@@ -44,7 +44,16 @@ const settingsSections = [
     color: '#16a34a',
     href: '/dashboard/settings/whatsapp',
   },
+  {
+    id: 'waseet',
+    title: 'إعدادات الوسيط',
+    description: 'ربط API شركة الوسيط',
+    icon: Truck,
+    color: '#f59e0b',
+    href: '/dashboard/settings/waseet',
+  },
 ]
+
 
 export default function SettingsPage() {
   return (
