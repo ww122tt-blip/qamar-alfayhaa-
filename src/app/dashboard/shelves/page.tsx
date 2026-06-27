@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { Layers, Plus, Search, Send, Trash2, Eye, Package, Loader2, X, DollarSign, CheckCircle, ChevronRight } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Layers, Plus, Search, Send, Trash2, Eye, Package, Loader2, X, DollarSign, CheckCircle, ChevronRight, ScanLine, AlertCircle } from 'lucide-react'
 import { formatDate, formatCurrency } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import { Shelf, Shipment } from '@/types'
@@ -73,6 +73,13 @@ function ShelfDetailModal({ shelf, onClose, onUpdate }: { shelf: Shelf; onClose:
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
   const [selectedShipmentId, setSelectedShipmentId] = useState('')
+  
+  // Scanner States
+  const [barcodeInput, setBarcodeInput] = useState('')
+  const [errorMsg, setErrorMsg] = useState('')
+  const [successMsg, setSuccessMsg] = useState('')
+  const [scanning, setScanning] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -87,18 +94,99 @@ function ShelfDetailModal({ shelf, onClose, onUpdate }: { shelf: Shelf; onClose:
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  const handleAddShipment = async () => {
-    if (!selectedShipmentId) return
+  // Keep focus on input automatically
+  useEffect(() => {
+    if (shelf.status === 'created') {
+      inputRef.current?.focus()
+    }
+  }, [shipments, shelf.status])
+
+  const handleContainerClick = (e: React.MouseEvent) => {
+    if (shelf.status === 'created' && (e.target as HTMLElement).tagName !== 'BUTTON' && (e.target as HTMLElement).tagName !== 'SELECT' && (e.target as HTMLElement).tagName !== 'INPUT') {
+      inputRef.current?.focus()
+    }
+  }
+
+  const playBeep = (success: boolean) => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
+      const oscillator = audioCtx.createOscillator()
+      const gainNode = audioCtx.createGain()
+      oscillator.connect(gainNode)
+      gainNode.connect(audioCtx.destination)
+      if (success) {
+        oscillator.type = 'sine'
+        oscillator.frequency.value = 800
+        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime)
+        oscillator.start()
+        oscillator.stop(audioCtx.currentTime + 0.1)
+      } else {
+        oscillator.type = 'sawtooth'
+        oscillator.frequency.value = 300
+        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime)
+        oscillator.start()
+        oscillator.stop(audioCtx.currentTime + 0.3)
+      }
+    } catch (e) {}
+  }
+
+  const handleAddShipmentId = async (shipmentId: string) => {
     setAdding(true)
-    const { error } = await supabase.from('shipments').update({ shelf_id: shelf.id }).eq('id', selectedShipmentId)
+    const { error } = await supabase.from('shipments').update({ shelf_id: shelf.id }).eq('id', shipmentId)
     if (!error) {
       const newCount = (shelf.shipments_count || 0) + 1
       await supabase.from('shelves').update({ shipments_count: newCount }).eq('id', shelf.id)
       onUpdate({ ...shelf, shipments_count: newCount })
       setSelectedShipmentId('')
-      fetchData()
+      await fetchData()
     }
     setAdding(false)
+  }
+
+  const handleScan = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const code = barcodeInput.trim()
+    if (!code) return
+
+    setBarcodeInput('')
+    setErrorMsg('')
+    setSuccessMsg('')
+    setScanning(true)
+
+    // Check if already in this shelf
+    if (shipments.some(s => s.code === code || s.tracking_number === code || s.id.startsWith(code))) {
+      setErrorMsg(`الشحنة ${code} موجودة مسبقاً في هذا الشليف!`)
+      playBeep(false)
+      setScanning(false)
+      return
+    }
+
+    // Fetch shipment
+    const { data, error } = await supabase
+      .from('shipments')
+      .select('*, client:clients(name)')
+      .or(`code.eq.${code},tracking_number.eq.${code},id.eq.${code}`)
+      .single()
+
+    if (error || !data) {
+      setErrorMsg(`لم يتم العثور على شحنة بالرقم: ${code}`)
+      playBeep(false)
+    } else {
+      if (data.shelf_id) {
+        setErrorMsg(`الشحنة ${code} مضافة مسبقاً لشليف آخر!`)
+        playBeep(false)
+      } else if (data.status !== 'new') {
+         setErrorMsg(`الشحنة ${code} حالتها الحالية تمنع إضافتها للشليف!`)
+         playBeep(false)
+      } else {
+        // Valid, add it
+        await handleAddShipmentId(data.id)
+        setSuccessMsg(`تمت إضافة الشحنة ${code} بنجاح`)
+        playBeep(true)
+      }
+    }
+    setScanning(false)
+    inputRef.current?.focus()
   }
 
   const handleRemoveShipment = async (shipmentId: string) => {
@@ -110,96 +198,215 @@ function ShelfDetailModal({ shelf, onClose, onUpdate }: { shelf: Shelf; onClose:
       onUpdate({ ...shelf, shipments_count: newCount })
       fetchData()
     }
+    inputRef.current?.focus()
+  }
+
+  const printBarcode = () => {
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) return
+    const barcodeUrl = `https://barcode.tec-it.com/barcode.ashx?data=${shelf.code}&code=Code128&translate-esc=on`
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>طباعة شليف ${shelf.code}</title>
+          <style>
+            body { font-family: sans-serif; text-align: center; padding: 20px; }
+            .label-container { width: 400px; margin: 0 auto; border: 2px solid #000; padding: 20px; border-radius: 10px; }
+            img { max-width: 100%; height: 120px; margin-bottom: 15px; }
+            h1 { font-size: 24px; margin: 0 0 10px 0; }
+            p { font-size: 18px; margin: 5px 0; font-weight: bold; }
+            .date { font-size: 14px; font-weight: normal; margin-top: 20px; color: #555; }
+            @media print {
+              body { margin: 0; padding: 0; }
+              .label-container { border: none; width: 100%; height: 100%; }
+            }
+          </style>
+        </head>
+        <body onload="window.print(); window.close();">
+          <div class="label-container">
+            <h1>شليف / تجميعة شحنات</h1>
+            <img src="${barcodeUrl}" alt="Barcode" />
+            <p>رمز الشليف: ${shelf.code}</p>
+            <p>عدد الشحنات: ${shelf.shipments_count || shipments.length}</p>
+            <div class="date">تاريخ الإنشاء: ${new Date(shelf.created_at).toLocaleString('ar-IQ')}</div>
+          </div>
+        </body>
+      </html>
+    `)
+    printWindow.document.close()
   }
 
   const totalAmount = shipments.reduce((s, sh) => s + (sh.amount || 0), 0)
   const totalFee = shipments.reduce((s, sh) => s + (sh.delivery_fee || 0), 0)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay">
-      <div className="glass-card w-full max-w-3xl max-h-[90vh] overflow-y-auto animate-fade-in shadow-2xl">
-        <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-slate-50/50">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white shadow-sm border border-slate-200"><Layers size={20} className="text-gold" /></div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay" onClick={handleContainerClick}>
+      <div className="glass-card w-full max-w-4xl max-h-[90vh] overflow-y-auto animate-fade-in shadow-2xl bg-slate-50">
+        
+        {/* Header */}
+        <div className="sticky top-0 z-10 flex items-center justify-between p-6 border-b border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-slate-50 border border-slate-200 shadow-sm">
+              <Layers size={24} className="text-gold" />
+            </div>
             <div>
-              <h2 className="text-lg font-extrabold text-slate-800">تفاصيل الشلف</h2>
-              <span className="font-mono font-bold text-gold text-sm">{shelf.code}</span>
+              <h2 className="text-xl font-extrabold text-slate-800 flex items-center gap-2">
+                تفاصيل الشليف 
+                <span className="font-mono font-bold bg-gold/10 text-gold px-2 py-0.5 rounded text-sm">{shelf.code}</span>
+              </h2>
+              <p className="text-xs font-semibold text-slate-500">{STATUS_LABELS[shelf.status]}</p>
             </div>
           </div>
-          <button onClick={onClose} className="btn-ghost p-2 rounded-lg hover:bg-slate-200 text-slate-500"><X size={18} /></button>
+          <div className="flex items-center gap-2">
+            <button onClick={printBarcode} className="btn-ghost text-slate-600 hover:text-slate-900 border border-slate-200 bg-white">
+              <span className="flex items-center gap-2">🖨️ طباعة الباركود</span>
+            </button>
+            <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors">
+              <X size={20} />
+            </button>
+          </div>
         </div>
-        <div className="p-6 space-y-5">
+
+        <div className="p-6 space-y-6">
           {/* Stats */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {[
-              { label: 'عدد الشحنات', value: shipments.length.toString(), color: 'text-slate-800' },
-              { label: 'قيمة البضائع', value: formatCurrency(totalAmount), color: 'text-green-600' },
-              { label: 'كلف التوصيل', value: formatCurrency(totalFee), color: 'text-slate-600' },
+              { label: 'عدد الشحنات', value: shipments.length.toString(), color: 'text-slate-800', bg: 'bg-white' },
+              { label: 'إجمالي قيمة البضائع', value: formatCurrency(totalAmount), color: 'text-green-600', bg: 'bg-green-50/50' },
+              { label: 'إجمالي كلف التوصيل', value: formatCurrency(totalFee), color: 'text-blue-600', bg: 'bg-blue-50/50' },
             ].map(stat => (
-              <div key={stat.label} className="bg-slate-50 rounded-xl p-3 border border-slate-100 text-center">
-                <p className="text-xs text-slate-400 font-bold mb-1">{stat.label}</p>
-                <p className={`font-extrabold text-sm ${stat.color}`}>{stat.value}</p>
+              <div key={stat.label} className={`${stat.bg} rounded-2xl p-5 border border-slate-200/60 shadow-sm flex flex-col justify-center`}>
+                <p className="text-xs text-slate-500 font-bold mb-1">{stat.label}</p>
+                <p className={`font-extrabold text-xl ${stat.color}`}>{stat.value}</p>
               </div>
             ))}
           </div>
 
-          {/* Add Shipment */}
+          {/* Scanner & Manual Add Area */}
           {shelf.status === 'created' && (
-            <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
-              <h3 className="text-sm font-extrabold text-blue-800 mb-3 flex items-center gap-2"><Plus size={14} /> إضافة شحنة للشلف</h3>
-              <div className="flex gap-3">
-                <select value={selectedShipmentId} onChange={e => setSelectedShipmentId(e.target.value)} className="input-field flex-1 bg-white shadow-sm">
-                  <option value="">اختر شحنة (الشحنات الجديدة غير المعينة)...</option>
-                  {availableShipments.map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.code || s.number} - {s.recipient_name} ({s.client?.name})
-                    </option>
-                  ))}
-                </select>
-                <button onClick={handleAddShipment} disabled={!selectedShipmentId || adding} className="btn-primary px-5 shadow-sm disabled:opacity-50">
-                  {adding ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} إضافة
-                </button>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+              
+              {/* Scanner */}
+              <div className="space-y-3">
+                <label className="text-sm font-extrabold text-slate-800 flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-md bg-blue-100 text-blue-600 flex items-center justify-center"><ScanLine size={14} /></span>
+                  الإضافة السريعة بالباركود
+                </label>
+                <form onSubmit={handleScan} className="relative">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={barcodeInput}
+                    onChange={e => setBarcodeInput(e.target.value)}
+                    disabled={scanning}
+                    autoFocus
+                    placeholder="امسح باركود الشحنة للدمج..."
+                    className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3.5 pl-12 text-slate-800 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 outline-none transition-all font-mono text-left dir-ltr shadow-inner"
+                  />
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2">
+                    {scanning ? <Loader2 size={20} className="text-blue-500 animate-spin" /> : <ScanLine size={20} className="text-slate-400" />}
+                  </div>
+                  <button type="submit" className="hidden">Scan</button>
+                </form>
+                {/* Scanner Messages */}
+                {errorMsg && (
+                  <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg border border-red-100 animate-fade-in font-bold">
+                    <AlertCircle size={16} className="shrink-0" /> <p>{errorMsg}</p>
+                  </div>
+                )}
+                {successMsg && (
+                  <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 px-3 py-2 rounded-lg border border-green-100 animate-fade-in font-bold">
+                    <CheckCircle size={16} className="shrink-0" /> <p>{successMsg}</p>
+                  </div>
+                )}
               </div>
-              {availableShipments.length === 0 && (
-                <p className="text-xs text-blue-600 mt-2 font-bold">لا توجد شحنات جديدة متاحة للإضافة</p>
-              )}
+
+              {/* Manual Selection */}
+              <div className="space-y-3">
+                <label className="text-sm font-extrabold text-slate-800 flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-md bg-slate-100 text-slate-600 flex items-center justify-center"><Plus size={14} /></span>
+                  الإضافة اليدوية (من القائمة)
+                </label>
+                <div className="flex gap-2 h-[52px]">
+                  <select 
+                    value={selectedShipmentId} 
+                    onChange={e => setSelectedShipmentId(e.target.value)} 
+                    className="flex-1 bg-slate-50 border-2 border-slate-200 rounded-xl px-3 outline-none focus:border-gold focus:ring-4 focus:ring-gold/20 transition-all font-bold text-sm text-slate-700"
+                  >
+                    <option value="">اختر شحنة لدمجها...</option>
+                    {availableShipments.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.tracking_number || s.code} - {s.recipient_name || 'بدون اسم'}
+                      </option>
+                    ))}
+                  </select>
+                  <button 
+                    onClick={() => handleAddShipmentId(selectedShipmentId)} 
+                    disabled={!selectedShipmentId || adding} 
+                    className="w-14 bg-gold hover:bg-yellow-600 text-white rounded-xl flex items-center justify-center shadow-md shadow-gold/20 transition-colors disabled:opacity-50"
+                  >
+                    {adding ? <Loader2 size={20} className="animate-spin" /> : <Plus size={20} />}
+                  </button>
+                </div>
+                <p className="text-xs text-slate-400 font-bold px-1">
+                  الشحنات المتاحة للإضافة اليدوية: {availableShipments.length}
+                </p>
+              </div>
+
             </div>
           )}
 
           {/* Shipments List */}
-          {loading ? (
-            <div className="flex justify-center py-8"><Loader2 size={28} className="text-gold animate-spin" /></div>
-          ) : shipments.length === 0 ? (
-            <div className="text-center py-8 text-slate-400">
-              <Package size={40} className="mx-auto mb-3 opacity-30" />
-              <p className="font-bold">لا توجد شحنات في هذا الشلف بعد</p>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="bg-slate-50 border-b border-slate-200 p-4">
+              <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-2">
+                <Package size={16} className="text-gold" /> قائمة الشحنات المدمجة ({shipments.length})
+              </h3>
             </div>
-          ) : (
-            <div>
-              <h3 className="text-sm font-extrabold text-slate-800 mb-3 flex items-center gap-2"><Package size={14} className="text-gold" /> الشحنات ({shipments.length})</h3>
-              <div className="space-y-2">
-                {shipments.map(s => (
-                  <div key={s.id} className="flex items-center justify-between bg-white rounded-xl p-3 border border-slate-100 shadow-sm">
-                    <div className="flex items-center gap-3">
-                      <span className="font-mono text-xs font-bold bg-slate-100 px-2 py-1 rounded text-slate-600">#{s.code || s.number}</span>
-                      <div>
-                        <p className="font-bold text-slate-800 text-sm">{s.recipient_name}</p>
-                        <p className="text-xs text-slate-500">{s.client?.name} • {s.governorate}</p>
+            
+            <div className="p-4">
+              {loading ? (
+                <div className="flex justify-center py-10"><Loader2 size={32} className="text-gold animate-spin" /></div>
+              ) : shipments.length === 0 ? (
+                <div className="text-center py-12 text-slate-400 flex flex-col items-center">
+                  <div className="w-20 h-20 rounded-full bg-slate-50 flex items-center justify-center mb-4 border-2 border-dashed border-slate-200">
+                    <Package size={32} className="opacity-50" />
+                  </div>
+                  <p className="font-extrabold text-slate-600 text-lg">الشليف فارغ حالياً</p>
+                  <p className="text-sm font-medium mt-1">امسح باركود الشحنات لإضافتها هنا</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                  {shipments.map((s, index) => (
+                    <div key={s.id} className="group flex items-center justify-between bg-white rounded-xl p-3 border border-slate-100 shadow-sm hover:shadow-md hover:border-gold/30 transition-all">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 font-bold text-xs flex items-center justify-center border border-slate-100">
+                          {index + 1}
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-800 text-sm">{s.tracking_number || s.code}</p>
+                          <p className="text-xs text-slate-500 font-medium truncate max-w-[120px]">{s.recipient_name || 'بدون اسم'} • {s.client?.name}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-extrabold text-green-600 bg-green-50 px-2 py-1 rounded-md">{formatCurrency(s.amount || 0)}</span>
+                        {shelf.status === 'created' && (
+                          <button 
+                            onClick={() => handleRemoveShipment(s.id)} 
+                            className="w-8 h-8 rounded-lg flex items-center justify-center text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors opacity-50 group-hover:opacity-100"
+                            title="إزالة الشحنة من الشليف"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-bold text-green-600">{formatCurrency(s.amount || 0)}</span>
-                      {shelf.status === 'created' && (
-                        <button onClick={() => handleRemoveShipment(s.id)} className="w-7 h-7 rounded-lg flex items-center justify-center text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors">
-                          <X size={14} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
+          </div>
+
         </div>
       </div>
     </div>
