@@ -70,7 +70,7 @@ export default function PublicSignupPage() {
 
       // Send WhatsApp Message to client
       const storeUrl = typeof window !== 'undefined' ? `${window.location.origin}` : 'https://qamar-alfayhaa.vercel.app'
-      const msg = `مرحباً بك يا *${form.name}* في قمر الفيحاء! 🌙\n\nتم تسجيل حسابك بنجاح وتفعيله تلقائياً.\n\n📌 *بيانات الدخول الخاصة بك:*\n- كود العميل: ${code}\n- كلمة المرور: ${form.password}\n\n📦 *رابط لوحة التحكم لمتابعة شحناتك:*\n${storeUrl}/dashboard\n\nنسعد بخدمتك!`
+      const msg = `مرحباً بك يا *${form.name}* في قمر الفيحاء! 🌙\n\nتم تسجيل حسابك بنجاح وتفعيله تلقائياً.\n\n📌 *بيانات الدخول الخاصة بك:*\n- كود العميل: ${code}\n- كلمة المرور: ${form.password}\n\n📦 *رابط المتجر لمتابعة شحناتك:*\n${storeUrl}/client-stats/${data.id}\n\nنسعد بخدمتك!`
       
       // Sending in background (don't await so we don't delay the UI)
       sendWhatsAppMessage(form.phone1, msg).catch(console.error)
