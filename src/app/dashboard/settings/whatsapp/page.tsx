@@ -74,27 +74,21 @@ export default function WhatsAppSettingsPage() {
     setQrLoading(true)
     try {
       const url = settings.api_url.endsWith('/') ? settings.api_url.slice(0, -1) : settings.api_url
-      // Evolution API endpoint to create/connect instance and get base64 QR
-      const res = await fetch(`${url}/instance/create`, {
+      // Call internal Next.js API route to bypass Mixed Content/CORS
+      const res = await fetch('/api/whatsapp/qr', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json', 
-          'apikey': settings.api_key || 'QamarAlFayhaa2026'
-        },
-        body: JSON.stringify({ 
-          instanceName: settings.instance_name || 'qamar_main',
-          qrcode: true,
-          integration: "WHATSAPP-BAILEYS"
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceName: settings.instance_name || 'qamar_main' })
       })
       const data = await res.json()
-      if (data?.qrcode?.base64 || data?.base64) {
+      
+      if (res.ok && (data?.qrcode?.base64 || data?.base64)) {
         setQrCode(data.qrcode?.base64 || data.base64)
       } else {
-        alert('حدث خطأ أثناء جلب الباركود. هل السيرفر يعمل؟ ' + JSON.stringify(data))
+        alert('حدث خطأ أثناء جلب الباركود. هل السيرفر يعمل؟ ' + (data?.error || JSON.stringify(data)))
       }
     } catch (err: any) {
-      alert('لا يمكن الاتصال بسيرفر الواتساب الخارجي. هل السيرفر يعمل؟ ' + err.message)
+      alert('لا يمكن الاتصال بالسيرفر. ' + err.message)
     }
     setQrLoading(false)
   }
