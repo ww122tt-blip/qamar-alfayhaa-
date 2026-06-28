@@ -36,8 +36,6 @@ export default function WhatsAppSettingsPage() {
     
     if (settings?.id) {
       await supabase.from('whatsapp_settings').update({
-        api_url: settings.api_url,
-        api_key: settings.api_key,
         notify_new_shipment: settings.notify_new_shipment,
         notify_status_change: settings.notify_status_change
       }).eq('id', settings.id)
@@ -52,23 +50,30 @@ export default function WhatsAppSettingsPage() {
   // 3. Fetch QR Code from External Server
   const fetchQr = async () => {
     if (!settings?.api_url) {
-      alert('يرجى حفظ رابط السيرفر أولاً (API URL)')
+      alert('يتم الآن تهيئة الاتصال بالخادم، يرجى المحاولة بعد قليل')
       return
     }
     setQrLoading(true)
     try {
       const url = settings.api_url.endsWith('/') ? settings.api_url.slice(0, -1) : settings.api_url
-      // Example Evolution API endpoint to get base64 QR
-      const res = await fetch(`${url}/instance/connect`, {
+      // Evolution API endpoint to create/connect instance and get base64 QR
+      const res = await fetch(`${url}/instance/create`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${settings.api_key || ''}` },
-        body: JSON.stringify({ instance: settings.instance_name || 'qamar_main' })
+        headers: { 
+          'Content-Type': 'application/json', 
+          'apikey': settings.api_key || 'QamarAlFayhaa2026'
+        },
+        body: JSON.stringify({ 
+          instanceName: settings.instance_name || 'qamar_main',
+          qrcode: true,
+          integration: "WHATSAPP-BAILEYS"
+        })
       })
       const data = await res.json()
-      if (data?.base64) {
-        setQrCode(data.base64)
+      if (data?.qrcode?.base64 || data?.base64) {
+        setQrCode(data.qrcode?.base64 || data.base64)
       } else {
-        alert('حدث خطأ أثناء جلب الباركود. تأكد أن السيرفر يعمل.')
+        alert('حدث خطأ أثناء جلب الباركود. هل السيرفر يعمل؟ ' + JSON.stringify(data))
       }
     } catch (err: any) {
       alert('لا يمكن الاتصال بسيرفر الواتساب الخارجي. هل السيرفر يعمل؟ ' + err.message)
@@ -99,31 +104,10 @@ export default function WhatsAppSettingsPage() {
           
           <form onSubmit={handleSave} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="bg-slate-50 p-4 border-b border-slate-200 flex items-center gap-2">
-              <Database size={18} className="text-slate-500" />
-              <h2 className="font-bold text-slate-700">بيانات الاتصال بالسيرفر</h2>
+              <MessageSquare size={18} className="text-slate-500" />
+              <h2 className="font-bold text-slate-700">إعدادات الإشعارات</h2>
             </div>
             <div className="p-5 space-y-4">
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">رابط سيرفر VPS (API URL)</label>
-                <input type="text" dir="ltr"
-                  value={settings?.api_url || ''} 
-                  onChange={e => setSettings({...settings, api_url: e.target.value})}
-                  placeholder="مثال: http://123.45.67.89:8080" 
-                  className="input-field w-full font-mono text-sm" />
-                <p className="text-xs text-slate-400 mt-1">يجب أن يحتوي على http:// والمنفذ</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">مفتاح الاتصال (API Key)</label>
-                <input type="password" dir="ltr"
-                  value={settings?.api_key || ''} 
-                  onChange={e => setSettings({...settings, api_key: e.target.value})}
-                  placeholder="********" 
-                  className="input-field w-full font-mono text-sm" />
-              </div>
-
-              <hr className="border-slate-100 my-4" />
-
               <h3 className="font-bold text-slate-700 mb-3 text-sm">متى يتم الإرسال للزبون؟</h3>
               
               <label className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer transition-colors">

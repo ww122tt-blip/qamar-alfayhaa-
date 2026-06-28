@@ -55,31 +55,31 @@ export async function sendWhatsAppMessage(
 
     const logId = logData?.id
 
-    // 3. الاتصال بسيرفر الواتساب الخارجي (Evolution API أو سيرفرك المخصص)
-    // الهيكل نفترضه بناءً على ما سنبرمجه لاحقاً في whatsapp-server.js
-    const response = await fetch(`${apiUrl}/message/send`, {
+    // 3. الاتصال بسيرفر الواتساب الخارجي (Evolution API)
+    const instanceName = settings.instance_name || 'qamar_main'
+    const response = await fetch(`${apiUrl}/message/sendText/${instanceName}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${settings.api_key || ''}`
+        'apikey': settings.api_key || 'QamarAlFayhaa2026'
       },
       body: JSON.stringify({
         number: formattedPhone,
-        message: message,
-        instance: settings.instance_name || 'qamar_main'
+        options: { delay: 1200, presence: 'composing' },
+        textMessage: { text: message }
       })
     })
 
     const result = await response.json()
 
     // 4. تحديث حالة الرسالة في السجل
-    if (response.ok && result.success) {
+    if (response.ok && (result.key?.id || result.messageId)) {
       if (logId) {
         await supabase.from('whatsapp_logs').update({ status: 'sent' }).eq('id', logId)
       }
       return true
     } else {
-      throw new Error(result.error || 'فشل الإرسال من السيرفر الخارجي')
+      throw new Error(result.error || result.message || 'فشل الإرسال من السيرفر الخارجي')
     }
 
   } catch (error: any) {
