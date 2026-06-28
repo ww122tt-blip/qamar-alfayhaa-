@@ -16,7 +16,25 @@ export default function WhatsAppSettingsPage() {
   // 1. Fetch data
   const fetchData = async () => {
     setLoading(true)
-    const { data: setts } = await supabase.from('whatsapp_settings').select('*').limit(1).single()
+    let { data: setts, error } = await supabase.from('whatsapp_settings').select('*').limit(1).single()
+    
+    // If no row exists, let's create the default one automatically
+    if (error && error.code === 'PGRST116') {
+      const defaultSettings = {
+        id: 1,
+        api_url: 'http://138.68.133.239:8080',
+        api_key: 'QamarAlFayhaa2026',
+        instance_name: 'qamar_main',
+        notify_new_shipment: true,
+        notify_status_change: true,
+        is_connected: false
+      }
+      const { data: newSetts, error: insertError } = await supabase.from('whatsapp_settings').insert([defaultSettings]).select().single()
+      if (!insertError && newSetts) {
+        setts = newSetts
+      }
+    }
+
     if (setts) {
       setSettings(setts)
     }
