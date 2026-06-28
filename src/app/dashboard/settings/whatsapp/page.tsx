@@ -93,6 +93,19 @@ export default function WhatsAppSettingsPage() {
     setQrLoading(false)
   }
 
+  const checkStatus = async () => {
+    try {
+      const res = await fetch('/api/whatsapp/status')
+      const data = await res.json()
+      if (data.connected) {
+         setSettings({...settings, is_connected: true} as any)
+         alert('تم تأكيد الاتصال بنجاح! الواتساب يعمل الآن.')
+      } else {
+         alert('الواتساب غير متصل حالياً.')
+      }
+    } catch (err) {}
+  }
+
   if (loading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-green-600" size={32} /></div>
 
   return (
@@ -208,6 +221,12 @@ export default function WhatsAppSettingsPage() {
               <p className="text-xs text-slate-500 mt-1">
                 حالة الجلسة: <span className="font-mono text-slate-700">{settings?.instance_name || 'qamar_main'}</span>
               </p>
+              
+              {!settings?.is_connected && (
+                <button onClick={checkStatus} type="button" className="mt-3 text-xs bg-blue-50 text-blue-600 font-bold px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors">
+                  تحقق من الاتصال الآن
+                </button>
+              )}
             </div>
 
             {!settings?.is_connected && (
