@@ -16,8 +16,10 @@ export default function WhatsAppSettingsPage() {
   // 1. Fetch data
   const fetchData = async () => {
     setLoading(true)
-    const { data: setts } = await supabase.from('whatsapp_settings').select('*').single()
-    if (setts) setSettings(setts)
+    const { data: setts } = await supabase.from('whatsapp_settings').select('*').limit(1).single()
+    if (setts) {
+      setSettings(setts)
+    }
 
     const { data: lg } = await supabase.from('whatsapp_logs').select('*').order('sent_at', { ascending: false }).limit(10)
     if (lg) setLogs(lg)
@@ -39,8 +41,6 @@ export default function WhatsAppSettingsPage() {
         notify_new_shipment: settings.notify_new_shipment,
         notify_status_change: settings.notify_status_change
       }).eq('id', settings.id)
-    } else {
-      await supabase.from('whatsapp_settings').insert([settings])
     }
     
     alert('تم حفظ الإعدادات بنجاح')
