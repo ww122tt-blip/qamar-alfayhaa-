@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { IRAQI_GOVERNORATES, generateClientCode } from '@/lib/utils'
 import { Eye, EyeOff, Loader2, Package, CheckCircle, Phone, User, Lock, MapPin, Home, Building, Tag } from 'lucide-react'
+import { sendWhatsAppMessage } from '@/lib/whatsapp'
 
 export default function PublicSignupPage() {
   const router = useRouter()
@@ -44,7 +45,7 @@ export default function PublicSignupPage() {
       address: form.address,
       pricing_type: 'per_order',
       delivery_price: 5000,
-      is_active: false, // Pending approval
+      is_active: true, // Auto approved
     }]).select().single()
 
     if (data && !error) {
@@ -60,12 +61,20 @@ export default function PublicSignupPage() {
       }])
       // Add activity log
       await supabase.from('activity_logs').insert([{
-        action: 'طلب تسجيل جديد',
+        action: 'تسجيل عميل جديد',
         entity_type: 'client',
         entity_id: code,
-        details: `طلب تسجيل من ${form.name} - الهاتف: ${form.phone1}`,
+        details: `تسجيل تلقائي لـ ${form.name} - الهاتف: ${form.phone1}`,
         user_name: form.name,
       }])
+
+      // Send WhatsApp Message to client
+      const storeUrl = typeof window !== 'undefined' ? `${window.location.origin}` : 'https://qamar-alfayhaa.vercel.app'
+      const msg = `مرحباً بك يا *${form.name}* في قمر الفيحاء! 🌙\n\nتم تسجيل حسابك بنجاح وتفعيله تلقائياً.\n\n📌 *بيانات الدخول الخاصة بك:*\n- كود العميل: ${code}\n- كلمة المرور: ${form.password}\n\n📦 *رابط لوحة التحكم لمتابعة شحناتك:*\n${storeUrl}/dashboard\n\nنسعد بخدمتك!`
+      
+      // Sending in background (don't await so we don't delay the UI)
+      sendWhatsAppMessage(form.phone1, msg).catch(console.error)
+
       setStep('success')
     } else {
       alert('حدث خطأ أثناء التسجيل: ' + (error?.message || 'يرجى المحاولة مرة أخرى'))

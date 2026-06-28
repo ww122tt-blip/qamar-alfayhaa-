@@ -55,31 +55,33 @@ export async function sendWhatsAppMessage(
 
     const logId = logData?.id
 
-    // 3. الاتصال بسيرفر الواتساب الخارجي (Evolution API)
-    const instanceName = settings.instance_name || 'qamar_main'
-    const response = await fetch(`${apiUrl}/message/sendText/${instanceName}`, {
+    // 3. الاتصال بسيرفر الواتساب عبر الوسيط (Proxy) لتجنب مشاكل المتصفح (CORS)
+    // We can check if we are in browser (window) or server, but since this might run in browser, use absolute or relative path
+    const isBrowser = typeof window !== 'undefined'
+    const baseUrl = isBrowser ? window.location.origin : (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000')
+    
+    const response = await fetch(`${baseUrl}/api/whatsapp/send`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'apikey': settings.api_key || 'QamarAlFayhaa2026'
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        number: formattedPhone,
-        options: { delay: 1200, presence: 'composing' },
-        textMessage: { text: message }
+        phone: formattedPhone,
+        message,
+        shipmentId
       })
     })
 
     const result = await response.json()
 
     // 4. تحديث حالة الرسالة في السجل
-    if (response.ok && (result.key?.id || result.messageId)) {
+    if (response.ok && result.success) {
       if (logId) {
         await supabase.from('whatsapp_logs').update({ status: 'sent' }).eq('id', logId)
       }
       return true
     } else {
-      throw new Error(result.error || result.message || 'فشل الإرسال من السيرفر الخارجي')
+      throw new Error(result.error || 'فشل الإرسال من السيرفر الخارجي')
     }
 
   } catch (error: any) {
