@@ -108,6 +108,19 @@ function AddShipmentModal({ onClose, onAdd, warehouses }: { onClose: () => void;
     
     if (data && !error) {
       await logActivity('إنشاء شحنة سريع', 'shipment', data.code, `تم إنشاء شحنة جديدة (سريعة): ${data.code}`)
+      
+      // WhatsApp Notification for New Shipment
+      try {
+        const { data: settings } = await supabase.from('whatsapp_settings').select('notify_new_shipment').single()
+        if (settings?.notify_new_shipment && data.client?.phones?.[0]) {
+          const storeUrl = typeof window !== 'undefined' ? window.location.origin : 'https://qamar-alfayhaa.vercel.app'
+          const msg = `مرحباً ${data.client.name} 👋\n\nتم تسجيل شحنة جديدة في حسابك بنجاح.\n\n📦 *رقم التتبع:* ${data.tracking_number || data.code}\n\nيمكنك متابعة حالة شحناتك في أي وقت عبر بوابتك:\n${storeUrl}/client-stats/${data.client_id}\n\nقمر الفيحاء للشحنات 🌙`
+          sendWhatsAppMessage(data.client.phones[0], msg, data.id).catch(console.error)
+        }
+      } catch (err) {
+        console.error('Error sending WhatsApp for new shipment:', err)
+      }
+
       onAdd(data as unknown as Shipment)
       onClose()
     } else {
