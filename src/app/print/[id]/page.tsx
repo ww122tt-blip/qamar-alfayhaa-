@@ -109,13 +109,13 @@ export default function PrintShipmentLabel({ params }: { params: { id: string } 
 
       </div>
 
-      <style jsx global>{\`
+      <style dangerouslySetInnerHTML={{ __html: `
         @media print {
-          body { background: white; margin: 0; padding: 0; }
-          .print\\\\:hidden { display: none !important; }
+          body { background: white !important; margin: 0 !important; padding: 0 !important; }
+          .print\\:hidden { display: none !important; }
           .print-container { width: 100% !important; max-width: none !important; margin: 0 !important; padding: 0 !important; box-shadow: none !important; }
         }
-      \`}</style>
+      `}} />
     </div>
   )
 }

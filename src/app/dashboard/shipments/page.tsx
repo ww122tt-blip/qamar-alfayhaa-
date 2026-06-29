@@ -499,7 +499,6 @@ function EditShipmentModal({ shipment, onClose, onUpdate, warehouses, shippingSt
               <label className="block text-xs font-bold mb-1.5 text-slate-600">كلفة التوصيل</label>
               <input type="number" value={form.delivery_fee} onChange={e => setForm(p => ({ ...p, delivery_fee: e.target.value }))} disabled={loading} className="input-field bg-white shadow-sm" />
             </div>
-            </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
