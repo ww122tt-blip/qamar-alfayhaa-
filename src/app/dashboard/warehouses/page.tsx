@@ -8,17 +8,28 @@ import { formatDate } from '@/lib/utils'
 
 function AddWarehouseModal({ onClose, onAdd }: { onClose: () => void; onAdd: (w: Warehouse) => void }) {
   const [form, setForm] = useState({
-    name: '', country: 'العراق', governorate: '', district: '', address: '', phone: ''
+    name: '', country: 'العراق', notes: ''
   })
+  const [features, setFeatures] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    const { data, error } = await supabase.from('warehouses').insert([{ ...form }]).select().single()
+    const { data, error } = await supabase.from('warehouses').insert([{ ...form, features }]).select().single()
     if (data) onAdd(data as Warehouse)
     setLoading(false)
     onClose()
+  }
+
+  const addFeature = () => setFeatures([...features, ''])
+  const updateFeature = (index: number, value: string) => {
+    const newFeatures = [...features]
+    newFeatures[index] = value
+    setFeatures(newFeatures)
+  }
+  const removeFeature = (index: number) => {
+    setFeatures(features.filter((_, i) => i !== index))
   }
 
   return (
@@ -32,27 +43,52 @@ function AddWarehouseModal({ onClose, onAdd }: { onClose: () => void; onAdd: (w:
         </div>
         <div className="p-6 overflow-y-auto">
           <form id="addWarehouseForm" onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-1">اسم المستودع <span className="text-red-500">*</span></label>
-              <input required value={form.name} onChange={e => setForm({...form, name: e.target.value})} type="text" className="input-field" placeholder="مثال: مخزن البصرة الرئيسي" />
-            </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">الدولة</label>
-                <input value={form.country} onChange={e => setForm({...form, country: e.target.value})} type="text" className="input-field" />
+                <label className="block text-sm font-bold text-slate-700 mb-1">البلد</label>
+                <input required value={form.country} onChange={e => setForm({...form, country: e.target.value})} type="text" className="input-field" />
               </div>
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">المحافظة</label>
-                <input value={form.governorate} onChange={e => setForm({...form, governorate: e.target.value})} type="text" className="input-field" placeholder="مثال: البصرة" />
+                <label className="block text-sm font-bold text-slate-700 mb-1">اسم المستودع <span className="text-red-500">*</span></label>
+                <input required value={form.name} onChange={e => setForm({...form, name: e.target.value})} type="text" className="input-field" />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-1">العنوان التفصيلي</label>
-              <input value={form.address} onChange={e => setForm({...form, address: e.target.value})} type="text" className="input-field" placeholder="المنطقة، الشارع، أقرب نقطة دالة" />
+              <label className="block text-sm font-bold text-slate-700 mb-1">الوصف</label>
+              <textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} className="input-field resize-none h-20" placeholder="وصف المستودع (اختياري)" />
             </div>
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-1">رقم الهاتف</label>
-              <input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} type="text" className="input-field" placeholder="07XXXXXXXXX" dir="ltr" />
+
+            <div className="pt-4 border-t border-slate-100">
+              <div className="flex justify-between items-center mb-3">
+                <button type="button" onClick={addFeature} className="text-xs font-bold bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors">
+                  <Plus size={14} /> إضافة خاصية
+                </button>
+                <h3 className="font-bold text-slate-800">الخصائص</h3>
+              </div>
+              
+              {features.length === 0 ? (
+                <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 text-center text-sm font-bold text-slate-500">
+                  لا توجد خصائص. اضغط على "إضافة خاصية" لإضافة خصائص جديدة
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {features.map((feature, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <input 
+                        type="text" 
+                        value={feature} 
+                        onChange={(e) => updateFeature(idx, e.target.value)} 
+                        className="input-field flex-1" 
+                        placeholder="مثال: رقم الهاتف: 559862261" 
+                        required
+                      />
+                      <button type="button" onClick={() => removeFeature(idx)} className="p-2.5 text-red-500 hover:bg-red-50 rounded-xl transition-colors shrink-0">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </form>
         </div>
@@ -127,7 +163,7 @@ export default function WarehousesPage() {
         </div>
       </div>
 
-      {/* Grid */}
+      {/* Grid -> Table */}
       {loading ? (
         <div className="flex justify-center p-12"><Loader2 className="animate-spin text-orange-600" size={32} /></div>
       ) : filteredWarehouses.length === 0 ? (
@@ -137,41 +173,68 @@ export default function WarehousesPage() {
           <p className="text-sm text-slate-500 mt-1">قم بإضافة المستودع الأول للبدء في تنظيم شحناتك</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredWarehouses.map((warehouse) => (
-            <div key={warehouse.id} className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow relative group">
-              <div className="flex justify-between items-start mb-4">
-                <div className="w-12 h-12 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center">
-                  <WarehouseIcon size={20} className="text-slate-600" />
-                </div>
-                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit size={16} /></button>
-                  <button onClick={() => handleDelete(warehouse.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
-                </div>
-              </div>
-              <h3 className="text-lg font-extrabold text-slate-800 mb-1">{warehouse.name}</h3>
-              <div className="flex flex-col gap-2 mt-4">
-                <div className="flex items-start gap-2 text-sm text-slate-600">
-                  <MapPin size={16} className="text-slate-400 mt-0.5 shrink-0" />
-                  <span className="font-medium">{warehouse.governorate} {warehouse.district && `- ${warehouse.district}`} <br/><span className="text-xs text-slate-500">{warehouse.address}</span></span>
-                </div>
-                {warehouse.phone && (
-                  <div className="flex items-center gap-2 text-sm text-slate-600">
-                    <Phone size={16} className="text-slate-400 shrink-0" />
-                    <span className="font-medium font-mono" dir="ltr">{warehouse.phone}</span>
-                  </div>
-                )}
-              </div>
-              <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center text-xs font-bold text-slate-400">
-                <span>تاريخ الإضافة</span>
-                <span>{formatDate(warehouse.created_at)}</span>
-              </div>
-            </div>
-          ))}
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-right">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 text-sm">
+                <tr>
+                  <th className="p-4 font-bold text-center w-12">#</th>
+                  <th className="p-4 font-bold">اسم المستودع</th>
+                  <th className="p-4 font-bold">البلد</th>
+                  <th className="p-4 font-bold">الخصائص</th>
+                  <th className="p-4 font-bold">تاريخ الإنشاء</th>
+                  <th className="p-4 font-bold text-left">الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredWarehouses.map((warehouse, index) => (
+                  <tr key={warehouse.id} className="hover:bg-slate-50 transition-colors group">
+                    <td className="p-4 text-center text-slate-500 font-mono text-sm">{index + 1}</td>
+                    <td className="p-4">
+                      <div className="font-extrabold text-slate-800">{warehouse.name}</div>
+                      {warehouse.notes && <div className="text-xs text-slate-500 mt-1 max-w-[200px] leading-tight">{warehouse.notes}</div>}
+                    </td>
+                    <td className="p-4">
+                      {warehouse.country && (
+                        <span className="inline-flex items-center px-2 py-1 bg-red-50 text-red-600 text-xs font-bold rounded">
+                          {warehouse.country}
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-4">
+                      {warehouse.features && warehouse.features.length > 0 ? (
+                        <div className="flex flex-col gap-1 text-xs">
+                          {warehouse.features.slice(0, 3).map((feat, i) => (
+                            <div key={i} className="font-bold text-slate-700">{feat}</div>
+                          ))}
+                          {warehouse.features.length > 3 && (
+                            <div className="inline-flex items-center px-2 py-1 bg-teal-50 text-teal-700 text-[10px] font-bold rounded w-max mt-1">
+                              +{warehouse.features.length - 3} أخرى
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400">لا توجد خصائص</span>
+                      )}
+                    </td>
+                    <td className="p-4 text-sm font-mono text-slate-600">
+                      {formatDate(warehouse.created_at)}
+                    </td>
+                    <td className="p-4">
+                      <div className="flex items-center justify-end gap-2 opacity-90 group-hover:opacity-100 transition-opacity">
+                        <button className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-blue-100 bg-white shadow-sm"><Edit size={14} /></button>
+                        <button onClick={() => handleDelete(warehouse.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-red-100 bg-white shadow-sm"><Trash2 size={14} /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
-      {showAddModal && <AddWarehouseModal onClose={() => setShowAddModal(false)} onAdd={(w) => setWarehouses([w, ...warehouses])} />}
+      {showAddModal && <AddWarehouseModal onClose={() => setShowAddModal(false)} onAdd={(w) => fetchWarehouses()} />}
     </div>
   )
 }
