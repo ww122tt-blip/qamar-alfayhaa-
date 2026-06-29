@@ -74,6 +74,10 @@ export default function MainDashboardPage() {
   
   const [shipments, setShipments] = useState<Shipment[]>([])
   const [clients, setClients] = useState<Client[]>([])
+  const [cashboxesCount, setCashboxesCount] = useState(0)
+  const [totalCashboxBalance, setTotalCashboxBalance] = useState(0)
+  const [warehousesCount, setWarehousesCount] = useState(0)
+  const [settings, setSettings] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
 
   const fetchData = async () => {
@@ -83,13 +87,26 @@ export default function MainDashboardPage() {
     if (dateRange.from) shipmentsQuery = shipmentsQuery.gte('created_at', dateRange.from)
     if (dateRange.to) shipmentsQuery = shipmentsQuery.lte('created_at', dateRange.to + 'T23:59:59')
     
-    const [shipmentsRes, clientsRes] = await Promise.all([
+    const [shipmentsRes, clientsRes, cashboxesRes, warehousesRes, settingsRes] = await Promise.all([
       shipmentsQuery,
-      supabase.from('clients').select('*').order('created_at', { ascending: false })
+      supabase.from('clients').select('*').order('created_at', { ascending: false }),
+      supabase.from('cashboxes').select('*'),
+      supabase.from('warehouses').select('*', { count: 'exact', head: true }),
+      supabase.from('settings').select('*')
     ])
     
     if (shipmentsRes.data) setShipments(shipmentsRes.data as unknown as Shipment[])
     if (clientsRes.data) setClients(clientsRes.data as unknown as Client[])
+    if (cashboxesRes.data) {
+      setCashboxesCount(cashboxesRes.data.length)
+      setTotalCashboxBalance(cashboxesRes.data.reduce((sum: number, cb: any) => sum + (cb.balance || 0), 0))
+    }
+    if (warehousesRes.count) setWarehousesCount(warehousesRes.count)
+    if (settingsRes.data) {
+      const sets: Record<string, string> = {}
+      settingsRes.data.forEach(s => sets[s.key] = s.value)
+      setSettings(sets)
+    }
     
     setLoading(false)
   }
@@ -104,7 +121,7 @@ export default function MainDashboardPage() {
   const pendingShipments = shipments.filter(s => ['new', 'picked_up'].includes(s.status)).length
   const outForDelivery = shipments.filter(s => s.status === 'out_for_delivery').length
   
-  const totalAmount = shipments.reduce((sum, s) => sum + (s.amount || 0), 0)
+  const totalDeliveryFees = shipments.reduce((sum, s) => sum + (s.delivery_fee || 0), 0)
   
   const totalClients = clients.length
   const activeClients = clients.filter(c => c.is_active).length
@@ -193,8 +210,10 @@ export default function MainDashboardPage() {
               <h2 className="text-base font-extrabold text-slate-800">المالية المتوقعة</h2>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <StatCard title="إجمالي المبالغ للشحنات (د.ع)" value={formatCurrency(totalAmount)} icon={Wallet} color="#0f172a"
-                subtitle="قيمة كل البضائع المسجلة" />
+              <StatCard title="إجمالي المبالغ للشحنات (د.ع)" value={formatCurrency(totalDeliveryFees)} icon={Wallet} color="#0f172a"
+                subtitle="إجمالي رسوم التوصيل" />
+              <StatCard title="أرصدة الصناديق الحالية (د.ع)" value={formatCurrency(totalCashboxBalance)} icon={Wallet} color="#C9A84C"
+                subtitle={`موزعة على ${cashboxesCount} صندوق`} />
             </div>
           </div>
 
@@ -203,11 +222,13 @@ export default function MainDashboardPage() {
             <div className="lg:col-span-4">
               <div className="flex items-center gap-2 mb-4">
                 <Users size={16} className="text-slate-800" />
-                <h2 className="text-sm font-extrabold text-slate-800">العملاء</h2>
+                <h2 className="text-sm font-extrabold text-slate-800">العملاء والعمليات</h2>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard title="إجمالي العملاء" value={totalClients} icon={Users} color="#0f172a" />
                 <StatCard title="عملاء نشطون" value={activeClients} icon={CheckCircle} color="#3b82f6" />
+                <StatCard title="المستودعات" value={warehousesCount} icon={Package} color="#eab308" />
+                <StatCard title="حالة الربط التقني" value={settings['waseet_api_key'] ? 'متصل' : 'غير متصل'} icon={AlertCircle} color={settings['waseet_api_key'] ? '#22c55e' : '#f43f5e'} subtitle="نظام وسيط" />
               </div>
             </div>
           </div>
@@ -300,8 +321,8 @@ export default function MainDashboardPage() {
                           {getStatusLabel(s.status)}
                         </span>
                       </td>
-                      <td className={`font-bold ${(s.amount || 0) > 0 ? 'text-green-600' : 'text-slate-400'}`}>
-                        {(s.amount || 0) > 0 ? formatCurrency(s.amount || 0) : '—'}
+                      <td className={`font-bold ${(s.delivery_fee || 0) > 0 ? 'text-green-600' : 'text-slate-400'}`}>
+                        {(s.delivery_fee || 0) > 0 ? formatCurrency(s.delivery_fee || 0) : '—'}
                       </td>
                       <td className="text-slate-400 text-xs font-medium">{formatDate(s.created_at)}</td>
                     </tr>
