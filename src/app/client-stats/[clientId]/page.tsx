@@ -156,14 +156,13 @@ export default function ClientPortal() {
                   <th className="p-4 font-bold">المستلم</th>
                   <th className="p-4 font-bold">المحافظة</th>
                   <th className="p-4 font-bold">الحالة</th>
-                  <th className="p-4 font-bold">قيمة البضاعة</th>
                   <th className="p-4 font-bold">التوصيل</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {displayedShipments.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-16 text-center">
+                    <td colSpan={6} className="p-16 text-center">
                       <Package size={48} className="mx-auto mb-4 text-slate-200" />
                       <p className="font-bold text-slate-400">لا توجد شحنات بعد</p>
                     </td>
@@ -190,7 +189,6 @@ export default function ClientPortal() {
                         {getStatusLabel(s.status)}
                       </span>
                     </td>
-                    <td className="p-4 font-bold text-green-700">{formatCurrency(s.amount || 0)}</td>
                     <td className="p-4 font-bold text-slate-500">{formatCurrency(s.delivery_fee || 0)}</td>
                   </tr>
                 ))}

@@ -58,6 +58,14 @@ function AddShipmentModal({ onClose, onAdd, warehouses }: { onClose: () => void;
   })
   const [loading, setLoading] = useState(false)
   const [imageFile, setImageFile] = useState<File | null>(null)
+  const [clientSearch, setClientSearch] = useState('')
+
+  const handleClientChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    setClientSearch(val)
+    const found = clients.find(c => `${c.name} - ${c.code}` === val)
+    setForm(p => ({ ...p, client_id: found ? found.id : '' }))
+  }
 
   useEffect(() => {
     supabase.from('clients').select('*').eq('is_active', true).then(({ data }) => {
@@ -101,7 +109,6 @@ function AddShipmentModal({ onClose, onAdd, warehouses }: { onClose: () => void;
       recipient_name: null,
       recipient_phone: null,
       governorate: null,
-      amount: 0,
       delivery_fee: 0,
     }
     const { data, error } = await supabase.from('shipments').insert([newShipmentData]).select('*, client:clients(*)').single()
@@ -163,20 +170,23 @@ function AddShipmentModal({ onClose, onAdd, warehouses }: { onClose: () => void;
             {/* Client */}
             <div className="space-y-2" dir="rtl">
               <div className="relative">
-                <select 
-                  required 
-                  value={form.client_id} 
-                  onChange={e => setForm(p => ({ ...p, client_id: e.target.value }))} 
-                  className={`w-full bg-[#2a2a2a] border ${!form.client_id ? 'border-red-500' : 'border-slate-700'} rounded-xl px-4 py-3 text-white focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none text-right appearance-none`}
-                >
-                  <option value="" disabled>* العميل</option>
-                  {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                <input 
+                  type="text"
+                  required
+                  list="clients-list"
+                  value={clientSearch}
+                  onChange={handleClientChange}
+                  className={`w-full bg-[#2a2a2a] border ${!form.client_id ? 'border-red-500' : 'border-slate-700'} rounded-xl px-4 py-3 text-white focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none text-right`}
+                  placeholder="* ابحث عن العميل (الاسم أو الكود)"
+                />
+                <datalist id="clients-list">
+                  {clients.map(c => <option key={c.id} value={`${c.name} - ${c.code}`} />)}
+                </datalist>
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                  <ChevronDown size={16} className="text-slate-400" />
+                  <Search size={16} className="text-slate-400" />
                 </div>
               </div>
-              {!form.client_id && <p className="text-red-500 text-xs mt-1 text-right">يجب اختيار العميل</p>}
+              {!form.client_id && <p className="text-red-500 text-xs mt-1 text-right">يجب اختيار العميل من القائمة</p>}
             </div>
 
             {/* Warehouse */}
@@ -260,14 +270,13 @@ function AddShipmentModal({ onClose, onAdd, warehouses }: { onClose: () => void;
 }
 
 // ====== EDIT SHIPMENT MODAL ======
-function EditShipmentModal({ shipment, onClose, onUpdate, warehouses }: { shipment: Shipment; onClose: () => void; onUpdate: (s: Shipment) => void; warehouses: Warehouse[] }) {
+function EditShipmentModal({ shipment, onClose, onUpdate, warehouses, shippingStatuses }: { shipment: Shipment; onClose: () => void; onUpdate: (s: Shipment) => void; warehouses: Warehouse[]; shippingStatuses: {id: string, name: string}[] }) {
   const [form, setForm] = useState({
     recipient_name: shipment.recipient_name || '',
     recipient_phone: shipment.recipient_phone || '',
-    governorate: shipment.governorate || 'البصرة',
+    governorate: shipment.governorate || '',
     district: shipment.district || '',
     weight: shipment.weight ? String(shipment.weight) : '',
-    amount: shipment.amount ? String(shipment.amount) : '',
     delivery_fee: shipment.delivery_fee ? String(shipment.delivery_fee) : '',
     notes: shipment.notes || '',
     status: shipment.status,
@@ -352,7 +361,6 @@ function EditShipmentModal({ shipment, onClose, onUpdate, warehouses }: { shipme
       recipient_phone: form.recipient_phone,
       governorate: form.governorate,
       district: form.district || null,
-      amount: parseFloat(form.amount) || 0,
       delivery_fee: parseFloat(form.delivery_fee) || 0,
       weight: parseFloat(form.weight) || 0,
       type: form.type,
@@ -388,7 +396,7 @@ function EditShipmentModal({ shipment, onClose, onUpdate, warehouses }: { shipme
             let msg = `تحديث شحنتك #${data.code || shipment.id.slice(0,8)} 🔄\n\n📊 الحالة الجديدة: ${statusName}\n👤 المستلم: ${form.recipient_name}\n\n`
             
             if (form.status === 'delivered') {
-              msg = `🎉 تم تسليم شحنتك بنجاح!\n\n📦 الشحنة: #${data.code || shipment.id.slice(0,8)}\n👤 المستلم: ${form.recipient_name}\n💰 المبلغ المحصّل: ${formatCurrency(data.amount)}\n\nشكراً لثقتكم بقمر الفيحاء 🌙`
+              msg = `🎉 تم تسليم شحنتك بنجاح!\n\n📦 الشحنة: #${data.code || shipment.id.slice(0,8)}\n👤 المستلم: ${form.recipient_name}\n\nشكراً لثقتكم بقمر الفيحاء 🌙`
             } else if (form.status === 'returned') {
               msg = `⚠️ تم إرجاع شحنتك\n\n📦 الشحنة: #${data.code || shipment.id.slice(0,8)}\n👤 المستلم: ${form.recipient_name}\n\nللاستفسار يرجى التواصل معنا.\nقمر الفيحاء 🌙`
             } else {
@@ -446,6 +454,12 @@ function EditShipmentModal({ shipment, onClose, onUpdate, warehouses }: { shipme
                     {s.label}
                   </button>
                 ))}
+                {shippingStatuses.map(s => (
+                  <button key={s.id} type="button" onClick={() => setForm(p => ({ ...p, status: s.name as ShipmentStatus }))}
+                    className={`p-2 rounded-xl text-xs font-bold border transition-all ${form.status === s.name ? 'text-white border-transparent shadow-md bg-blue-500' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}>
+                    {s.name}
+                  </button>
+                ))}
               </div>
             )}
           </div>
@@ -482,19 +496,9 @@ function EditShipmentModal({ shipment, onClose, onUpdate, warehouses }: { shipme
               <input type="text" value={form.district} onChange={e => setForm(p => ({ ...p, district: e.target.value }))} disabled={loading} className="input-field bg-white shadow-sm" />
             </div>
             <div>
-              <label className="block text-xs font-bold mb-1.5 text-slate-600">قيمة البضاعة</label>
-              <input type="number" value={form.amount} onChange={e => setForm(p => ({ ...p, amount: e.target.value }))} disabled={loading} className="input-field bg-white shadow-sm" />
-            </div>
-            <div>
               <label className="block text-xs font-bold mb-1.5 text-slate-600">كلفة التوصيل</label>
               <input type="number" value={form.delivery_fee} onChange={e => setForm(p => ({ ...p, delivery_fee: e.target.value }))} disabled={loading} className="input-field bg-white shadow-sm" />
             </div>
-            <div>
-              <label className="block text-xs font-bold mb-1.5 text-slate-600">المستودع الحالي</label>
-              <select value={form.warehouse_id} onChange={e => setForm(p => ({ ...p, warehouse_id: e.target.value }))} className="input-field bg-white shadow-sm" disabled={loading}>
-                <option value="">غير محدد</option>
-                {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-              </select>
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -569,7 +573,6 @@ function ViewShipmentModal({ shipment, onClose }: { shipment: Shipment; onClose:
               { label: 'المستلم', value: shipment.recipient_name },
               { label: 'هاتف المستلم', value: shipment.recipient_phone },
               { label: 'المحافظة', value: `${shipment.governorate}${shipment.district ? ' - ' + shipment.district : ''}` },
-              { label: 'قيمة البضاعة', value: formatCurrency(shipment.amount || 0) },
               { label: 'كلفة التوصيل', value: formatCurrency(shipment.delivery_fee) },
             ].map(item => (
               <div key={item.label} className="bg-slate-50 rounded-xl p-3 border border-slate-100">
@@ -625,16 +628,18 @@ export default function ShipmentsPage() {
   const PAGE_SIZE = 20
 
   const [warehouses, setWarehouses] = useState<Warehouse[]>([])
-  const [warehouseFilter, setWarehouseFilter] = useState('all')
+  const [shippingStatuses, setShippingStatuses] = useState<{id: string, name: string}[]>([])
 
   const fetchShipmentsAndWarehouses = useCallback(async () => {
     setLoading(true)
     const [shipmentsRes, warehousesRes] = await Promise.all([
       supabase.from('shipments').select('*, client:clients(*), warehouse:warehouses(*)').order('created_at', { ascending: false }),
-      supabase.from('warehouses').select('*')
+      supabase.from('warehouses').select('*'),
+      supabase.from('shipping_statuses').select('id, name').order('created_at', { ascending: true })
     ])
     if (shipmentsRes.data) setShipments(shipmentsRes.data as unknown as Shipment[])
     if (warehousesRes.data) setWarehouses(warehousesRes.data as Warehouse[])
+    if (statusesRes.data) setShippingStatuses(statusesRes.data as {id: string, name: string}[])
     if (shipmentsRes.error) console.error(shipmentsRes.error)
     setLoading(false)
   }, [])
@@ -659,10 +664,9 @@ export default function ShipmentsPage() {
       s.recipient_phone?.includes(search)
     const matchStatus = statusFilter === 'all' || s.status === statusFilter
     const matchGov = governorateFilter === 'all' || s.governorate === governorateFilter
-    const matchWarehouse = warehouseFilter === 'all' || s.warehouse_id === warehouseFilter
     const matchFrom = !dateFrom || new Date(s.created_at) >= new Date(dateFrom)
     const matchTo = !dateTo || new Date(s.created_at) <= new Date(dateTo + 'T23:59:59')
-    return matchSearch && matchStatus && matchGov && matchWarehouse && matchFrom && matchTo
+    return matchSearch && matchStatus && matchGov && matchFrom && matchTo
   })
 
   const totalPages = Math.ceil(filteredShipments.length / PAGE_SIZE)
@@ -698,15 +702,13 @@ export default function ShipmentsPage() {
             </div>
             <div className="flex gap-3 w-full sm:w-auto">
               <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value as ShipmentStatus | 'all'); setPage(1) }} className="input-field w-full sm:w-48 shadow-sm font-semibold flex-1">
-                {STATUS_FILTER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                <option value="all">جميع الحالات</option>
+                {STATUS_FILTER_OPTIONS.filter(o => o.value !== 'all').map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                {shippingStatuses.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
               </select>
               <select value={governorateFilter} onChange={e => { setGovernorateFilter(e.target.value); setPage(1) }} className="input-field w-full sm:w-40 shadow-sm font-semibold flex-1">
                 <option value="all">كل المحافظات</option>
                 {IRAQI_GOVERNORATES.map(g => <option key={g} value={g}>{g}</option>)}
-              </select>
-              <select value={warehouseFilter} onChange={e => { setWarehouseFilter(e.target.value); setPage(1) }} className="input-field w-full sm:w-40 shadow-sm font-semibold flex-1">
-                <option value="all">المكان (الكل)</option>
-                {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>
             </div>
           </div>
@@ -728,8 +730,8 @@ export default function ShipmentsPage() {
               </div>
             )}
             <div className="mr-auto flex gap-2">
-              {(search || statusFilter !== 'all' || governorateFilter !== 'all' || warehouseFilter !== 'all' || dateFrom || dateTo) && (
-                <button onClick={() => { setSearch(''); setStatusFilter('all'); setGovernorateFilter('all'); setWarehouseFilter('all'); setDateFrom(''); setDateTo(''); setPage(1) }} className="btn-ghost py-2 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 border-red-100">
+              {(search || statusFilter !== 'all' || governorateFilter !== 'all' || dateFrom || dateTo) && (
+                <button onClick={() => { setSearch(''); setStatusFilter('all'); setGovernorateFilter('all'); setDateFrom(''); setDateTo(''); setPage(1) }} className="btn-ghost py-2 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 border-red-100">
                   <X size={14} /> مسح الكل
                 </button>
               )}
@@ -753,9 +755,8 @@ export default function ShipmentsPage() {
                 <th>الرقم</th>
                 <th>المستلم</th>
                 <th>العميل</th>
-                <th>المكان الحالي</th>
                 <th>الحالة</th>
-                <th>المدفوعات</th>
+                <th>التوصيل</th>
                 <th>التاريخ</th>
                 <th>الإجراءات</th>
               </tr>
@@ -794,33 +795,15 @@ export default function ShipmentsPage() {
                     <div className="text-xs text-slate-500 font-mono" dir="ltr">{s.client?.code || ''}</div>
                   </td>
                   <td>
-                    {s.warehouse ? (
-                      <span className="inline-flex items-center gap-1 text-xs font-bold bg-orange-50 text-orange-700 px-2 py-1 rounded border border-orange-100">
-                        <WarehouseIcon size={12} /> {s.warehouse.name}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-slate-400 font-medium">—</span>
-                    )}
-                  </td>
-                  <td>
                     <span className={`badge ${getStatusClass(s.status)} shadow-sm whitespace-nowrap`}>
                       <span className="w-2 h-2 rounded-full bg-current opacity-75" />
                       {getStatusLabel(s.status)}
                     </span>
                   </td>
                   <td>
-                    <div className="text-xs space-y-1.5">
-                      <div className="flex items-center justify-between gap-4">
-                        <span className="text-slate-500 font-semibold">المبلغ:</span>
-                        <span className={`font-bold ${(s.amount || 0) > 0 ? 'text-green-600 bg-green-50 px-2 py-0.5 rounded' : 'text-slate-400'}`}>
-                          {(s.amount || 0) > 0 ? formatCurrency(s.amount || 0) : '—'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-4 border-t border-slate-100 pt-1">
-                        <span className="text-slate-500 font-semibold">التوصيل:</span>
-                        <span className="text-slate-700 font-bold">{formatCurrency(s.delivery_fee)}</span>
-                      </div>
-                    </div>
+                    <span className="text-slate-800 font-bold bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+                      {formatCurrency(s.delivery_fee)}
+                    </span>
                   </td>
                   <td><span className="text-xs font-medium text-slate-500">{formatDate(s.created_at)}</span></td>
                   <td>
@@ -834,6 +817,9 @@ export default function ShipmentsPage() {
                       <button className="btn-action delete" title="حذف" onClick={() => handleDelete(s.id, s.code || s.number || '')}>
                         <Trash2 size={14} /> <span>حذف</span>
                       </button>
+                      <a href={`/print/${s.id}`} target="_blank" rel="noopener noreferrer" className="btn-action view" title="طباعة">
+                        <Printer size={14} /> <span>طباعة</span>
+                      </a>
                     </div>
                   </td>
                 </tr>
@@ -865,7 +851,7 @@ export default function ShipmentsPage() {
       </div>
 
       {showAddModal && <AddShipmentModal onClose={() => setShowAddModal(false)} onAdd={s => { setShipments([s, ...shipments]); setPage(1) }} warehouses={warehouses} />}
-      {editingShipment && <EditShipmentModal shipment={editingShipment} onClose={() => setEditingShipment(null)} onUpdate={s => setShipments(shipments.map(x => x.id === s.id ? s : x))} warehouses={warehouses} />}
+      {editingShipment && <EditShipmentModal shipment={editingShipment} onClose={() => setEditingShipment(null)} onUpdate={s => setShipments(shipments.map(x => x.id === s.id ? s : x))} warehouses={warehouses} shippingStatuses={shippingStatuses} />}
       {viewingShipment && <ViewShipmentModal shipment={viewingShipment} onClose={() => setViewingShipment(null)} />}
     </div>
   )

@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
-import { Layers, Plus, Trash2, Edit, Lock, Unlock, ArrowRight, X } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Layers, Plus, Trash2, Edit, Lock, Unlock, ArrowRight, X, Loader2 } from 'lucide-react'
 import Link from 'next/link'
+import { supabase } from '@/lib/supabase'
 
 interface StatusItem {
   id: string
@@ -11,25 +12,23 @@ interface StatusItem {
   can_edit_shipment: boolean
 }
 
-const MOCK_STATUSES: StatusItem[] = [
-  { id: '1', name: 'قيد التحميل والنقل', is_editable: false, can_edit_shipment: false },
-  { id: '2', name: 'شحنات سلمت بنجاح', is_editable: false, can_edit_shipment: false },
-  { id: '3', name: 'مندوب التوصيل', is_editable: false, can_edit_shipment: false },
-  { id: '4', name: 'إعادة توصيل', is_editable: false, can_edit_shipment: false },
-  { id: '5', name: 'في مكتب البصرة', is_editable: true, can_edit_shipment: true },
-  { id: '6', name: 'تم الاستلام في مستودع الكويت', is_editable: false, can_edit_shipment: false },
-  { id: '7', name: 'في الطريق الى العراق', is_editable: false, can_edit_shipment: false },
-  { id: '8', name: 'وصلت الشحنة الى العراق', is_editable: false, can_edit_shipment: false },
-]
-
 function AddStatusModal({ onClose, onAdd }: { onClose: () => void; onAdd: (s: Partial<StatusItem>) => void }) {
   const [name, setName] = useState('')
   const [canEdit, setCanEdit] = useState(false)
+  const [loading, setLoading] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    onAdd({ name, can_edit_shipment: canEdit, is_editable: true })
-    onClose()
+    if (!name.trim()) return
+    setLoading(true)
+    const { data, error } = await supabase.from('shipping_statuses').insert([{ name, can_edit_shipment: canEdit, is_editable: true }]).select().single()
+    if (data && !error) {
+      onAdd(data as StatusItem)
+      onClose()
+    } else {
+      alert('خطأ في الإضافة: ' + error?.message)
+    }
+    setLoading(false)
   }
 
   return (
@@ -42,7 +41,7 @@ function AddStatusModal({ onClose, onAdd }: { onClose: () => void; onAdd: (s: Pa
             </div>
             <h2 className="text-lg font-extrabold text-slate-800">إضافة حالة شحن</h2>
           </div>
-          <button onClick={onClose} className="btn-ghost p-2 rounded-lg hover:bg-slate-200 text-slate-500">
+          <button onClick={onClose} disabled={loading} className="btn-ghost p-2 rounded-lg hover:bg-slate-200 text-slate-500">
             <X size={18} />
           </button>
         </div>
@@ -50,7 +49,7 @@ function AddStatusModal({ onClose, onAdd }: { onClose: () => void; onAdd: (s: Pa
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           <div>
             <label className="block text-sm font-bold mb-2 text-slate-700">اسم الحالة *</label>
-            <input type="text" placeholder="مثال: قيد المراجعة" required
+            <input type="text" placeholder="مثال: قيد المراجعة" required disabled={loading}
               value={name} onChange={e => setName(e.target.value)}
               className="input-field shadow-sm bg-white" />
           </div>
@@ -59,7 +58,7 @@ function AddStatusModal({ onClose, onAdd }: { onClose: () => void; onAdd: (s: Pa
             {canEdit ? <Unlock size={18} className="text-green-500" /> : <Lock size={18} className="text-amber-500" />}
             <span className="text-sm font-bold text-slate-700 flex-1">السماح بتعديل الشحنة عندما تكون في هذه الحالة</span>
             <label className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" className="sr-only peer" checked={canEdit} onChange={e => setCanEdit(e.target.checked)} />
+              <input type="checkbox" className="sr-only peer" checked={canEdit} onChange={e => setCanEdit(e.target.checked)} disabled={loading} />
               <div className="w-11 h-6 rounded-full peer-checked:bg-green-500 bg-slate-300 after:absolute after:right-[2px] after:top-[2px] after:w-5 after:h-5 after:rounded-full after:bg-white after:shadow-sm after:transition-all peer-checked:after:-translate-x-full" />
             </label>
           </div>
@@ -71,10 +70,10 @@ function AddStatusModal({ onClose, onAdd }: { onClose: () => void; onAdd: (s: Pa
           )}
 
           <div className="flex gap-3 pt-4 border-t border-slate-100">
-            <button type="submit" className="btn-primary flex-1 justify-center py-3 text-base shadow-md">
-              إضافة
+            <button type="submit" disabled={loading} className="btn-primary flex-1 justify-center py-3 text-base shadow-md disabled:opacity-50">
+              {loading ? <Loader2 size={18} className="animate-spin" /> : 'إضافة'}
             </button>
-            <button type="button" onClick={onClose} className="btn-ghost flex-1 justify-center py-3 text-base">
+            <button type="button" onClick={onClose} disabled={loading} className="btn-ghost flex-1 justify-center py-3 text-base">
               إلغاء
             </button>
           </div>
@@ -85,11 +84,25 @@ function AddStatusModal({ onClose, onAdd }: { onClose: () => void; onAdd: (s: Pa
 }
 
 export default function ShippingStatusesPage() {
-  const [statuses, setStatuses] = useState(MOCK_STATUSES)
+  const [statuses, setStatuses] = useState<StatusItem[]>([])
+  const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
 
+  useEffect(() => {
+    supabase.from('shipping_statuses').select('*').order('created_at', { ascending: true }).then(({ data }) => {
+      if (data) setStatuses(data as StatusItem[])
+      setLoading(false)
+    })
+  }, [])
+
   const handleAdd = (s: Partial<StatusItem>) => {
-    setStatuses(prev => [{ ...s, id: String(Date.now()) } as StatusItem, ...prev])
+    setStatuses(prev => [...prev, s as StatusItem])
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('هل أنت متأكد من حذف هذه الحالة؟')) return
+    setStatuses(prev => prev.filter(s => s.id !== id))
+    await supabase.from('shipping_statuses').delete().eq('id', id)
   }
 
   return (
@@ -113,28 +126,35 @@ export default function ShippingStatusesPage() {
       </div>
 
       {/* Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {statuses.map(s => (
-          <div key={s.id} className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex gap-1.5 flex-wrap">
-                <button className="btn-action delete flex-1 justify-center" disabled={!s.is_editable} style={{ opacity: s.is_editable ? 1 : 0.5 }}>
-                  <Trash2 size={14} /> <span>حذف</span>
-                </button>
-                <button className="btn-action edit flex-1 justify-center" disabled={!s.is_editable} style={{ opacity: s.is_editable ? 1 : 0.5 }}>
-                  <Edit size={14} /> <span>تعديل</span>
-                </button>
+      {loading ? (
+        <div className="py-20 flex justify-center"><Loader2 size={32} className="text-gold animate-spin" /></div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          {statuses.map(s => (
+            <div key={s.id} className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex gap-1.5 flex-wrap">
+                  <button onClick={() => handleDelete(s.id)} className="btn-action delete flex-1 justify-center" disabled={!s.is_editable} style={{ opacity: s.is_editable ? 1 : 0.5 }}>
+                    <Trash2 size={14} /> <span>حذف</span>
+                  </button>
+                  <button className="btn-action edit flex-1 justify-center" disabled={!s.is_editable} style={{ opacity: s.is_editable ? 1 : 0.5 }}>
+                    <Edit size={14} /> <span>تعديل</span>
+                  </button>
+                </div>
+                <h3 className="text-sm font-extrabold text-slate-800 text-right w-full">{s.name}</h3>
               </div>
-              <h3 className="text-sm font-extrabold text-slate-800 text-right w-full">{s.name}</h3>
+              
+              <div className={`mt-auto text-xs font-bold px-3 py-2 rounded-lg flex items-center justify-between border ${s.can_edit_shipment ? 'bg-green-50 text-green-700 border-green-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
+                <span>{s.can_edit_shipment ? 'قابل للتعديل' : 'غير قابل للتعديل'}</span>
+                {s.can_edit_shipment ? <Unlock size={14} /> : <Lock size={14} />}
+              </div>
             </div>
-            
-            <div className={`mt-auto text-xs font-bold px-3 py-2 rounded-lg flex items-center justify-between border ${s.can_edit_shipment ? 'bg-green-50 text-green-700 border-green-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>
-              <span>{s.can_edit_shipment ? 'قابل للتعديل' : 'غير قابل للتعديل'}</span>
-              {s.can_edit_shipment ? <Unlock size={14} /> : <Lock size={14} />}
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+          {statuses.length === 0 && (
+             <div className="col-span-full text-center py-12 text-slate-400">لا توجد حالات مسجلة</div>
+          )}
+        </div>
+      )}
 
       {showAddModal && (
         <AddStatusModal onClose={() => setShowAddModal(false)} onAdd={handleAdd} />

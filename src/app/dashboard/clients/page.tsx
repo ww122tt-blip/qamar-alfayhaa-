@@ -855,10 +855,12 @@ export default function ClientsPage() {
                         <Store size={12} /> الأسعار
                       </button>
                       <button onClick={() => {
-                        navigator.clipboard.writeText(`${window.location.origin}/client-stats/${c.id}`);
-                        alert('تم نسخ رابط المتجر بنجاح!');
+                        const url = `${window.location.origin}/client-stats/${c.id}`;
+                        navigator.clipboard.writeText(url);
+                        window.open(url, '_blank');
+                        alert('تم نسخ رابط المتجر وفتحه بنجاح!');
                       }} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-600 text-white text-xs font-bold hover:bg-slate-700 transition-colors shadow-sm"
-                        title="نسخ رابط المتجر">
+                        title="نسخ رابط المتجر وفتحه">
                         <Link size={12} /> المتجر
                       </button>
                       <button onClick={() => {

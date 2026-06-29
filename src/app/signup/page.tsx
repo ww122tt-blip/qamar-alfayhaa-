@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { IRAQI_GOVERNORATES, generateClientCode } from '@/lib/utils'
+import { IRAQI_GOVERNORATES, IRAQI_DISTRICTS, generateClientCode } from '@/lib/utils'
 import { Eye, EyeOff, Loader2, Package, CheckCircle, Phone, User, Lock, MapPin, Home, Building, Tag } from 'lucide-react'
 import { sendWhatsAppMessage } from '@/lib/whatsapp'
 
@@ -216,13 +216,19 @@ export default function PublicSignupPage() {
               <div>
                 <label className="block text-sm font-bold mb-2 text-slate-300 text-right">المنطقة *</label>
                 <input type="text" required placeholder="المنطقة"
+                  list="districts-list"
                   value={form.district} onChange={e => setForm(p => ({ ...p, district: e.target.value }))}
                   disabled={submitting}
                   className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-white placeholder-slate-500 text-right focus:outline-none focus:border-amber-400/60 transition-all duration-200" />
+                <datalist id="districts-list">
+                  {form.governorate && IRAQI_DISTRICTS[form.governorate]?.map(d => (
+                    <option key={d} value={d} />
+                  ))}
+                </datalist>
               </div>
               <div>
                 <label className="block text-sm font-bold mb-2 text-slate-300 text-right">المحافظة *</label>
-                <select required value={form.governorate} onChange={e => setForm(p => ({ ...p, governorate: e.target.value }))}
+                <select required value={form.governorate} onChange={e => setForm(p => ({ ...p, governorate: e.target.value, district: '' }))}
                   disabled={submitting}
                   className="w-full bg-[#1a1a2e] border border-white/10 rounded-xl px-4 py-3.5 text-white focus:outline-none focus:border-amber-400/60 transition-all duration-200 appearance-none">
                   <option value="" disabled>اختر</option>
