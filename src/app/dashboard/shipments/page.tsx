@@ -272,6 +272,10 @@ function AddShipmentModal({ onClose, onAdd, warehouses }: { onClose: () => void;
           </div>
         </form>
       </div>
+    </div>
+  )
+}
+
 // ====== EDIT SHIPMENT MODAL ======
 function EditShipmentModal({ shipment, onClose, onUpdate, clients, warehouses, shippingStatuses }: { shipment: Shipment, onClose: () => void, onUpdate: (s: Shipment) => void, clients: Client[], warehouses: Warehouse[], shippingStatuses: {id: string, name: string, can_edit_shipment: boolean}[] }) {
   const [loading, setLoading] = useState(false)
