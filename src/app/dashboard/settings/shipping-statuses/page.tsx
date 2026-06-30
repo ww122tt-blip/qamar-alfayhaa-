@@ -83,10 +83,82 @@ function AddStatusModal({ onClose, onAdd }: { onClose: () => void; onAdd: (s: Pa
   )
 }
 
+function EditStatusModal({ status, onClose, onUpdate }: { status: StatusItem; onClose: () => void; onUpdate: (s: StatusItem) => void }) {
+  const [name, setName] = useState(status.name)
+  const [canEdit, setCanEdit] = useState(status.can_edit_shipment)
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!name.trim()) return
+    setLoading(true)
+    const { data, error } = await supabase.from('shipping_statuses').update({ name, can_edit_shipment: canEdit }).eq('id', status.id).select().single()
+    if (data && !error) {
+      onUpdate(data as StatusItem)
+      onClose()
+    } else {
+      alert('خطأ في التعديل: ' + error?.message)
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay">
+      <div className="glass-card w-full max-w-lg animate-fade-in bg-white shadow-2xl">
+        <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-slate-50/50">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-white shadow-sm border border-slate-200">
+              <Edit size={20} className="text-blue-600" />
+            </div>
+            <h2 className="text-lg font-extrabold text-slate-800">تعديل حالة الشحن</h2>
+          </div>
+          <button onClick={onClose} disabled={loading} className="btn-ghost p-2 rounded-lg hover:bg-slate-200 text-slate-500">
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          <div>
+            <label className="block text-sm font-bold mb-2 text-slate-700">اسم الحالة *</label>
+            <input type="text" placeholder="مثال: قيد المراجعة" required disabled={loading}
+              value={name} onChange={e => setName(e.target.value)}
+              className="input-field shadow-sm bg-white" />
+          </div>
+
+          <div className="flex items-center gap-3 p-4 rounded-xl border border-slate-200 bg-slate-50">
+            {canEdit ? <Unlock size={18} className="text-green-500" /> : <Lock size={18} className="text-amber-500" />}
+            <span className="text-sm font-bold text-slate-700 flex-1">السماح بتعديل الشحنة عندما تكون في هذه الحالة</span>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" className="sr-only peer" checked={canEdit} onChange={e => setCanEdit(e.target.checked)} disabled={loading} />
+              <div className="w-11 h-6 rounded-full peer-checked:bg-green-500 bg-slate-300 after:absolute after:right-[2px] after:top-[2px] after:w-5 after:h-5 after:rounded-full after:bg-white after:shadow-sm after:transition-all peer-checked:after:-translate-x-full" />
+            </label>
+          </div>
+
+          {!canEdit && (
+            <p className="text-xs font-semibold text-slate-500 bg-slate-100 p-3 rounded-lg border border-slate-200">
+              لا يمكن تغيير حالة الشحنة يدوياً عندما تكون في هذه الحالة، يمكن تحديثها فقط عبر الوسيط.
+            </p>
+          )}
+
+          <div className="flex gap-3 pt-4 border-t border-slate-100">
+            <button type="submit" disabled={loading} className="btn-primary flex-1 justify-center py-3 text-base shadow-md disabled:opacity-50">
+              {loading ? <Loader2 size={18} className="animate-spin" /> : 'حفظ التعديلات'}
+            </button>
+            <button type="button" onClick={onClose} disabled={loading} className="btn-ghost flex-1 justify-center py-3 text-base">
+              إلغاء
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function ShippingStatusesPage() {
   const [statuses, setStatuses] = useState<StatusItem[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [editingStatus, setEditingStatus] = useState<StatusItem | null>(null)
 
   useEffect(() => {
     supabase.from('shipping_statuses').select('*').order('created_at', { ascending: true }).then(({ data }) => {
@@ -97,6 +169,10 @@ export default function ShippingStatusesPage() {
 
   const handleAdd = (s: Partial<StatusItem>) => {
     setStatuses(prev => [...prev, s as StatusItem])
+  }
+
+  const handleUpdate = (updatedStatus: StatusItem) => {
+    setStatuses(prev => prev.map(s => s.id === updatedStatus.id ? updatedStatus : s))
   }
 
   const handleDelete = async (id: string) => {
@@ -137,7 +213,7 @@ export default function ShippingStatusesPage() {
                   <button onClick={() => handleDelete(s.id)} className="btn-action delete flex-1 justify-center" disabled={!s.is_editable} style={{ opacity: s.is_editable ? 1 : 0.5 }}>
                     <Trash2 size={14} /> <span>حذف</span>
                   </button>
-                  <button className="btn-action edit flex-1 justify-center" disabled={!s.is_editable} style={{ opacity: s.is_editable ? 1 : 0.5 }}>
+                  <button onClick={() => setEditingStatus(s)} className="btn-action edit flex-1 justify-center">
                     <Edit size={14} /> <span>تعديل</span>
                   </button>
                 </div>
@@ -158,6 +234,9 @@ export default function ShippingStatusesPage() {
 
       {showAddModal && (
         <AddStatusModal onClose={() => setShowAddModal(false)} onAdd={handleAdd} />
+      )}
+      {editingStatus && (
+        <EditStatusModal status={editingStatus} onClose={() => setEditingStatus(null)} onUpdate={handleUpdate} />
       )}
     </div>
   )

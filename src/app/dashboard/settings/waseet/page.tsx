@@ -32,13 +32,14 @@ export default function WaseetSettingsPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
-    await supabase.from('waseet_settings').update({
+    await supabase.from('waseet_settings').upsert({
+      id: 1,
       username: form.username,
       password: form.password,
       is_active: form.is_active,
       token: null, // Reset token when credentials change
       token_updated_at: null,
-    }).eq('id', 1)
+    })
     await fetchSettings()
     setSaving(false)
     alert('تم حفظ إعدادات الوسيط بنجاح ✅')

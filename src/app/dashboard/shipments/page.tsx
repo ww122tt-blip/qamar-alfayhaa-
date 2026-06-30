@@ -272,12 +272,9 @@ function AddShipmentModal({ onClose, onAdd, warehouses }: { onClose: () => void;
           </div>
         </form>
       </div>
-    </div>
-  )
-}
-
 // ====== EDIT SHIPMENT MODAL ======
-function EditShipmentModal({ shipment, onClose, onUpdate, warehouses, shippingStatuses }: { shipment: Shipment; onClose: () => void; onUpdate: (s: Shipment) => void; warehouses: Warehouse[]; shippingStatuses: {id: string, name: string}[] }) {
+function EditShipmentModal({ shipment, onClose, onUpdate, clients, warehouses, shippingStatuses }: { shipment: Shipment, onClose: () => void, onUpdate: (s: Shipment) => void, clients: Client[], warehouses: Warehouse[], shippingStatuses: {id: string, name: string, can_edit_shipment: boolean}[] }) {
+  const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({
     recipient_name: shipment.recipient_name || '',
     recipient_phone: shipment.recipient_phone || '',
@@ -290,9 +287,12 @@ function EditShipmentModal({ shipment, onClose, onUpdate, warehouses, shippingSt
     type: shipment.type || 'per_order',
     warehouse_id: shipment.warehouse_id || '',
   })
-  const [loading, setLoading] = useState(false)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [settings, setSettings] = useState<Record<string, number>>({})
+
+  const currentStatusObj = shippingStatuses.find(s => s.name === shipment.status)
+  const isLockedByStatus = currentStatusObj && currentStatusObj.can_edit_shipment === false
+  const isLocked = !!shipment.waseet_qr_id || isLockedByStatus
 
   // Fetch Settings on mount
   useEffect(() => {
@@ -438,8 +438,8 @@ function EditShipmentModal({ shipment, onClose, onUpdate, warehouses, shippingSt
           <button onClick={onClose} disabled={loading} className="btn-ghost p-2 rounded-lg hover:bg-slate-200 text-slate-500"><X size={18} /></button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {/* Status Change - LOCKED if shipment is with Waseet */}
-          <div className={`p-4 rounded-2xl border ${shipment.waseet_qr_id ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-100'}`}>
+          {/* Status Change - LOCKED if shipment is with Waseet or Status is unmodifiable */}
+          <div className={`p-4 rounded-2xl border ${isLocked ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-100'}`}>
             <div className="flex items-center justify-between mb-3">
               <label className="block text-xs font-extrabold uppercase text-gold tracking-widest">تغيير الحالة</label>
               {shipment.waseet_qr_id && (
@@ -447,10 +447,15 @@ function EditShipmentModal({ shipment, onClose, onUpdate, warehouses, shippingSt
                   <Truck size={12} /> يتحكم بها الوسيط • QR: {shipment.waseet_qr_id}
                 </span>
               )}
+              {isLockedByStatus && !shipment.waseet_qr_id && (
+                <span className="flex items-center gap-1.5 text-xs font-bold bg-amber-100 text-amber-700 px-3 py-1 rounded-full border border-amber-200">
+                  🔒 غير قابلة للتعديل
+                </span>
+              )}
             </div>
-            {shipment.waseet_qr_id ? (
+            {isLocked ? (
               <p className="text-xs text-amber-700 font-medium bg-amber-100 px-4 py-3 rounded-xl border border-amber-200">
-                🔒 هذه الشحنة مع شركة الوسيط. يتم تحديث حالتها تلقائياً من الوسيط كل 30 دقيقة ولا يمكن تغييرها يدوياً.
+                🔒 {shipment.waseet_qr_id ? 'هذه الشحنة مع شركة الوسيط. يتم تحديث حالتها تلقائياً من الوسيط ولا يمكن تغييرها يدوياً.' : 'هذه الشحنة في حالة غير قابلة للتعديل. لا يمكن تغيير حالتها يدوياً.'}
               </p>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -634,7 +639,7 @@ export default function ShipmentsPage() {
   const PAGE_SIZE = 20
 
   const [warehouses, setWarehouses] = useState<Warehouse[]>([])
-  const [shippingStatuses, setShippingStatuses] = useState<{id: string, name: string}[]>([])
+  const [shippingStatuses, setShippingStatuses] = useState<{id: string, name: string, can_edit_shipment: boolean}[]>([])
 
   const fetchShipmentsAndWarehouses = useCallback(async () => {
     setLoading(true)
@@ -642,11 +647,11 @@ export default function ShipmentsPage() {
       const [shipmentsRes, warehousesRes, statusesRes] = await Promise.all([
         supabase.from('shipments').select('*, client:clients(*), warehouse:warehouses(*)').order('created_at', { ascending: false }),
         supabase.from('warehouses').select('*'),
-        supabase.from('shipping_statuses').select('id, name').order('created_at', { ascending: true })
+        supabase.from('shipping_statuses').select('id, name, can_edit_shipment').order('created_at', { ascending: true })
       ])
       if (shipmentsRes.data) setShipments(shipmentsRes.data as unknown as Shipment[])
       if (warehousesRes.data) setWarehouses(warehousesRes.data as Warehouse[])
-      if (statusesRes.data) setShippingStatuses(statusesRes.data as {id: string, name: string}[])
+      if (statusesRes.data) setShippingStatuses(statusesRes.data as {id: string, name: string, can_edit_shipment: boolean}[])
       if (shipmentsRes.error) console.error(shipmentsRes.error)
     } catch (err) {
       console.error('Failed to fetch data:', err)
@@ -736,7 +741,40 @@ export default function ShipmentsPage() {
             {selectedIds.length > 0 && (
               <div className="flex items-center gap-2 border-r border-slate-200 pr-3 mr-1">
                 <span className="text-sm font-bold text-gold bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-100">{selectedIds.length} محدد</span>
-                <button className="btn-primary py-2 px-4 text-xs shadow-sm bg-blue-600 hover:bg-blue-700"><Send size={14} /> إرسال للوسيط</button>
+                <button 
+                  onClick={async (e) => {
+                    if (!confirm('هل أنت متأكد من إرسال الشحنات المحددة للوسيط؟')) return
+                    
+                    // Simple loop to send one by one
+                    let successCount = 0
+                    const originalBtnText = e.currentTarget.innerText
+                    e.currentTarget.innerText = 'جاري الإرسال...'
+                    e.currentTarget.disabled = true
+                    
+                    try {
+                      for (const id of selectedIds) {
+                        const res = await fetch('/api/waseet', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ action: 'send_shipment', shipmentId: id })
+                        })
+                        if (res.ok) successCount++
+                      }
+                      alert(`تم إرسال ${successCount} شحنة للوسيط بنجاح!`)
+                      fetchShipmentsAndWarehouses()
+                      setSelectedIds([])
+                    } catch (err) {
+                      console.error(err)
+                      alert('حدث خطأ أثناء الإرسال للوسيط')
+                    } finally {
+                      e.currentTarget.innerText = 'إرسال للوسيط'
+                      e.currentTarget.disabled = false
+                    }
+                  }}
+                  className="btn-primary py-2 px-4 text-xs shadow-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                >
+                  <Send size={14} /> إرسال للوسيط
+                </button>
                 <button className="btn-ghost py-2 px-4 text-xs shadow-sm"><Printer size={14} /> طباعة</button>
               </div>
             )}
