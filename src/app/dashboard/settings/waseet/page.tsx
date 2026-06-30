@@ -32,7 +32,7 @@ export default function WaseetSettingsPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
-    await supabase.from('waseet_settings').upsert({
+    const { error } = await supabase.from('waseet_settings').upsert({
       id: 1,
       username: form.username,
       password: form.password,
@@ -40,9 +40,15 @@ export default function WaseetSettingsPage() {
       token: null, // Reset token when credentials change
       token_updated_at: null,
     })
-    await fetchSettings()
+    
+    if (error) {
+      alert('خطأ في الحفظ: ' + error.message)
+      console.error(error)
+    } else {
+      await fetchSettings()
+      alert('تم حفظ إعدادات الوسيط بنجاح ✅')
+    }
     setSaving(false)
-    alert('تم حفظ إعدادات الوسيط بنجاح ✅')
   }
 
   const handleSyncNow = async () => {

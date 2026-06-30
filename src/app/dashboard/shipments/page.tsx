@@ -396,7 +396,14 @@ function EditShipmentModal({ shipment, onClose, onUpdate, clients, warehouses, s
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'send_shipment', shipmentId: shipment.id }),
-          }).catch(err => console.error('[Waseet] Auto-send failed:', err))
+          })
+          .then(async res => {
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}))
+              alert(`تنبيه: تم تغيير الحالة، لكن فشل الإرسال الفعلي للوسيط. السبب: ${err.error || 'غير معروف'}`)
+            }
+          })
+          .catch(err => console.error('[Waseet] Auto-send failed:', err))
         }
 
         // WhatsApp Notification (only if not going to waseet - waseet will handle its own notifications)

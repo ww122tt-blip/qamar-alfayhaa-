@@ -59,14 +59,25 @@ async function sendShipmentToWaseet(shipmentId: string): Promise<void> {
     return
   }
 
-  // Map governorate to city_id - default to Baghdad (1) if not found
-  // We'll use a simple mapping; in production this should come from waseet_cities table
   const CITY_MAP: Record<string, number> = {
-    'بغداد': 1, 'البصرة': 2, 'نينوى': 3, 'أربيل': 4,
-    'كركوك': 5, 'الأنبار': 6, 'ديالى': 7, 'صلاح الدين': 8,
-    'بابل': 9, 'النجف': 10, 'كربلاء': 11, 'واسط': 12,
-    'ميسان': 13, 'ذي قار': 14, 'المثنى': 15, 'القادسية': 16,
-    'دهوك': 17, 'السليمانية': 18
+    'بغداد': 1,
+    'كربلاء': 2,
+    'الأنبار': 3,
+    'بابل': 4,
+    'البصرة': 5,
+    'دهوك': 6,
+    'ديالى': 7,
+    'أربيل': 8,
+    'كركوك': 9,
+    'ميسان': 10,
+    'المثنى': 11,
+    'النجف': 12,
+    'نينوى': 13,
+    'القادسية': 14,
+    'صلاح الدين': 15,
+    'السليمانية': 16,
+    'ذي قار': 17,
+    'واسط': 18,
   }
 
   const cityId = CITY_MAP[shipment.governorate] || 1
