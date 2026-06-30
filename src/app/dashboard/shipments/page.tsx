@@ -111,29 +111,36 @@ function AddShipmentModal({ onClose, onAdd, warehouses }: { onClose: () => void;
       governorate: null,
       delivery_fee: 0,
     }
-    const { data, error } = await supabase.from('shipments').insert([newShipmentData]).select('*, client:clients(*)').single()
     
-    if (data && !error) {
-      await logActivity('إنشاء شحنة سريع', 'shipment', data.code, `تم إنشاء شحنة جديدة (سريعة): ${data.code}`)
+    try {
+      const { data, error } = await supabase.from('shipments').insert([newShipmentData]).select('*, client:clients(*)').single()
       
-      // WhatsApp Notification for New Shipment
-      try {
-        const { data: settings } = await supabase.from('whatsapp_settings').select('notify_new_shipment').single()
-        if (settings?.notify_new_shipment && data.client?.phones?.[0]) {
-          const storeUrl = typeof window !== 'undefined' ? window.location.origin : 'https://qamar-alfayhaa.vercel.app'
-          const msg = `مرحباً ${data.client.name} 👋\n\nتم تسجيل شحنة جديدة في حسابك بنجاح.\n\n📦 *رقم التتبع:* ${data.tracking_number || data.code}\n\nيمكنك متابعة حالة شحناتك في أي وقت عبر بوابتك:\n${storeUrl}/client-stats/${data.client_id}\n\nقمر الفيحاء للشحنات 🌙`
-          sendWhatsAppMessage(data.client.phones[0], msg, data.id).catch(console.error)
+      if (data && !error) {
+        await logActivity('إنشاء شحنة سريع', 'shipment', data.code, `تم إنشاء شحنة جديدة (سريعة): ${data.code}`)
+        
+        // WhatsApp Notification for New Shipment
+        try {
+          const { data: settings } = await supabase.from('whatsapp_settings').select('notify_new_shipment').single()
+          if (settings?.notify_new_shipment && data.client?.phones?.[0]) {
+            const storeUrl = typeof window !== 'undefined' ? window.location.origin : 'https://qamar-alfayhaa.vercel.app'
+            const msg = `مرحباً ${data.client.name} 👋\n\nتم تسجيل شحنة جديدة في حسابك بنجاح.\n\n📦 *رقم التتبع:* ${data.tracking_number || data.code}\n\nيمكنك متابعة حالة شحناتك في أي وقت عبر بوابتك:\n${storeUrl}/client-stats/${data.client_id}\n\nقمر الفيحاء للشحنات 🌙`
+            sendWhatsAppMessage(data.client.phones[0], msg, data.id).catch(console.error)
+          }
+        } catch (err) {
+          console.error('Error sending WhatsApp for new shipment:', err)
         }
-      } catch (err) {
-        console.error('Error sending WhatsApp for new shipment:', err)
-      }
 
-      onAdd(data as unknown as Shipment)
-      onClose()
-    } else {
-      alert('حدث خطأ أثناء الإضافة: ' + error?.message)
+        onAdd(data as unknown as Shipment)
+        onClose()
+      } else {
+        alert('حدث خطأ أثناء الإضافة: ' + error?.message)
+      }
+    } catch (err) {
+      console.error(err)
+      alert('حدث خطأ في الاتصال')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   return (
@@ -631,16 +638,21 @@ export default function ShipmentsPage() {
 
   const fetchShipmentsAndWarehouses = useCallback(async () => {
     setLoading(true)
-    const [shipmentsRes, warehousesRes] = await Promise.all([
-      supabase.from('shipments').select('*, client:clients(*), warehouse:warehouses(*)').order('created_at', { ascending: false }),
-      supabase.from('warehouses').select('*'),
-      supabase.from('shipping_statuses').select('id, name').order('created_at', { ascending: true })
-    ])
-    if (shipmentsRes.data) setShipments(shipmentsRes.data as unknown as Shipment[])
-    if (warehousesRes.data) setWarehouses(warehousesRes.data as Warehouse[])
-    if (statusesRes.data) setShippingStatuses(statusesRes.data as {id: string, name: string}[])
-    if (shipmentsRes.error) console.error(shipmentsRes.error)
-    setLoading(false)
+    try {
+      const [shipmentsRes, warehousesRes, statusesRes] = await Promise.all([
+        supabase.from('shipments').select('*, client:clients(*), warehouse:warehouses(*)').order('created_at', { ascending: false }),
+        supabase.from('warehouses').select('*'),
+        supabase.from('shipping_statuses').select('id, name').order('created_at', { ascending: true })
+      ])
+      if (shipmentsRes.data) setShipments(shipmentsRes.data as unknown as Shipment[])
+      if (warehousesRes.data) setWarehouses(warehousesRes.data as Warehouse[])
+      if (statusesRes.data) setShippingStatuses(statusesRes.data as {id: string, name: string}[])
+      if (shipmentsRes.error) console.error(shipmentsRes.error)
+    } catch (err) {
+      console.error('Failed to fetch data:', err)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => { fetchShipmentsAndWarehouses() }, [fetchShipmentsAndWarehouses])
