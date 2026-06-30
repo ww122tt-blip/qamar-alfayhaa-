@@ -96,24 +96,31 @@ function AddShipmentModal({ onClose, onAdd, warehouses }: { onClose: () => void;
       warehouse_id: form.warehouse_id || null,
       image_url: imageUrl
     }
-    const { data, error } = await supabase.from('shipments').insert([newShipmentData]).select('*, client:clients(*), warehouse:warehouses(*)').single()
-    if (data && !error) {
-      await logActivity('إنشاء شحنة', 'shipment', data.code, `تم إنشاء شحنة جديدة: ${data.code} للمستلم ${form.recipient_name}`)
-      await addNotification('شحنة جديدة', `تم إنشاء الشحنة ${data.code}`, 'shipment', data.code)
-      
-      // WhatsApp Notification
-      const { data: settings } = await supabase.from('whatsapp_settings').select('notify_new_shipment').single()
-      if (settings?.notify_new_shipment && data.client?.phones?.[0]) {
-        const msg = `مرحباً ${data.client.name} 👋\nتم استلام شحنتك بنجاح!\n\n📦 رقم الشحنة: #${data.code}\n👤 المستلم: ${form.recipient_name}\n📍 المحافظة: ${form.governorate}\n💰 المبلغ: ${formatCurrency(data.amount)}\n\n🔗 تتبع شحنتك: ${window.location.origin}/client-stats/${data.client_id}\n\nقمر الفيحاء للشحنات 🌙`
-        await sendWhatsAppMessage(data.client.phones[0], msg, data.id)
-      }
+    
+    try {
+      const { data, error } = await supabase.from('shipments').insert([newShipmentData]).select('*, client:clients(*), warehouse:warehouses(*)').single()
+      if (data && !error) {
+        await logActivity('إنشاء شحنة', 'shipment', data.code, `تم إنشاء شحنة جديدة: ${data.code} للمستلم ${form.recipient_name}`)
+        await addNotification('شحنة جديدة', `تم إنشاء الشحنة ${data.code}`, 'shipment', data.code)
+        
+        // WhatsApp Notification
+        const { data: settings } = await supabase.from('whatsapp_settings').select('notify_new_shipment').single()
+        if (settings?.notify_new_shipment && data.client?.phones?.[0]) {
+          const msg = `مرحباً ${data.client.name} 👋\nتم استلام شحنتك بنجاح!\n\n📦 رقم الشحنة: #${data.code}\n👤 المستلم: ${form.recipient_name}\n📍 المحافظة: ${form.governorate}\n💰 المبلغ: ${formatCurrency(data.amount)}\n\n🔗 تتبع شحنتك: ${window.location.origin}/client-stats/${data.client_id}\n\nقمر الفيحاء للشحنات 🌙`
+          await sendWhatsAppMessage(data.client.phones[0], msg, data.id)
+        }
 
-      onAdd(data as unknown as Shipment)
-      onClose()
-    } else {
-      alert('حدث خطأ أثناء الإضافة: ' + error?.message)
+        onAdd(data as unknown as Shipment)
+        onClose()
+      } else {
+        alert('حدث خطأ أثناء الإضافة: ' + error?.message)
+      }
+    } catch (err) {
+      console.error(err)
+      alert('حدث خطأ في الاتصال')
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   return (
@@ -524,14 +531,19 @@ export default function ShipmentsPage() {
 
   const fetchShipmentsAndWarehouses = useCallback(async () => {
     setLoading(true)
-    const [shipmentsRes, warehousesRes] = await Promise.all([
-      supabase.from('shipments').select('*, client:clients(*), warehouse:warehouses(*)').order('created_at', { ascending: false }),
-      supabase.from('warehouses').select('*')
-    ])
-    if (shipmentsRes.data) setShipments(shipmentsRes.data as unknown as Shipment[])
-    if (warehousesRes.data) setWarehouses(warehousesRes.data as Warehouse[])
-    if (shipmentsRes.error) console.error(shipmentsRes.error)
-    setLoading(false)
+    try {
+      const [shipmentsRes, warehousesRes] = await Promise.all([
+        supabase.from('shipments').select('*, client:clients(*), warehouse:warehouses(*)').order('created_at', { ascending: false }),
+        supabase.from('warehouses').select('*')
+      ])
+      if (shipmentsRes.data) setShipments(shipmentsRes.data as unknown as Shipment[])
+      if (warehousesRes.data) setWarehouses(warehousesRes.data as Warehouse[])
+      if (shipmentsRes.error) console.error(shipmentsRes.error)
+    } catch (err) {
+      console.error('Failed to fetch data:', err)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => { fetchShipmentsAndWarehouses() }, [fetchShipmentsAndWarehouses])
