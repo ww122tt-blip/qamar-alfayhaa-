@@ -80,7 +80,7 @@ async function sendShipmentToWaseet(shipmentId: string): Promise<void> {
     location: shipment.district || shipment.governorate,
     type_name: 'بضاعة',
     items_number: 1,
-    price: Math.round(shipment.amount || 0),
+    price: Math.round(shipment.delivery_fee || 0),
     package_size: 1, // Default to small
     merchant_notes: shipment.notes || '',
     replacement: 0 as 0 | 1,
@@ -89,10 +89,11 @@ async function sendShipmentToWaseet(shipmentId: string): Promise<void> {
   const result = await waseetCreateOrder(payload)
 
   if (result) {
-    // Save qr_id and sent_at to our DB
+    // Save qr_id, sent_at, and update status to at_waseet_office
     await supabase
       .from('shipments')
       .update({
+        status: 'at_waseet_office',
         waseet_qr_id: String(result.qr_id),
         waseet_status_id: String(result.status_id || '1'),
         waseet_status_text: result.status || 'في مكتب الوسيط',
@@ -100,18 +101,26 @@ async function sendShipmentToWaseet(shipmentId: string): Promise<void> {
       })
       .eq('id', shipmentId)
 
-    // Log
+    // Log the status history
+    await supabase.from('status_history').insert([{ 
+      shipment_id: shipmentId, 
+      status: 'at_waseet_office', 
+      notes: `إرسال للوسيط (رقم QR: ${result.qr_id})` 
+    }])
+
+    // Log Activity
     await supabase.from('activity_logs').insert([{
       action: 'إرسال للوسيط',
       entity_type: 'shipment',
       entity_id: shipment.code || shipmentId,
-      details: `تم إرسال الشحنة للوسيط تلقائياً. رقم QR: ${result.qr_id}`,
+      details: `تم إرسال الشحنة للوسيط وتحديث الحالة إلى في مكتب الوسيط. رقم QR: ${result.qr_id}`,
       user_name: 'System'
     }])
 
     console.log(`[Waseet] Shipment ${shipmentId} sent. QR ID: ${result.qr_id}`)
   } else {
     console.error(`[Waseet] Failed to send shipment ${shipmentId}`)
+    throw new Error('فشل الإرسال للوسيط، قد تكون هناك مشكلة في بيانات الشحنة أو في حساب الوسيط')
   }
 }
 

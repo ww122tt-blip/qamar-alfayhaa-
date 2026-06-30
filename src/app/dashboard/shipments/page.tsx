@@ -762,9 +762,16 @@ export default function ShipmentsPage() {
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ action: 'send_shipment', shipmentId: id })
                         })
-                        if (res.ok) successCount++
+                        if (res.ok) {
+                          successCount++
+                        } else {
+                          const errorData = await res.json().catch(() => ({}))
+                          alert(`فشل إرسال شحنة للوسيط: ${errorData.error || 'خطأ غير معروف'}`)
+                        }
                       }
-                      alert(`تم إرسال ${successCount} شحنة للوسيط بنجاح!`)
+                      if (successCount > 0) {
+                        alert(`تم إرسال ${successCount} شحنة للوسيط بنجاح!`)
+                      }
                       fetchShipmentsAndWarehouses()
                       setSelectedIds([])
                     } catch (err) {
