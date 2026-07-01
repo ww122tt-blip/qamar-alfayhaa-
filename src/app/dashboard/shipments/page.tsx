@@ -488,14 +488,6 @@ function EditShipmentModal({ shipment, onClose, onUpdate, clients, warehouses, s
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold mb-1.5 text-slate-600">اسم المستلم</label>
-              <input type="text" value={form.recipient_name} onChange={e => setForm(p => ({ ...p, recipient_name: e.target.value }))} disabled={loading} className="input-field bg-white shadow-sm" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold mb-1.5 text-slate-600">هاتف المستلم</label>
-              <input type="tel" value={form.recipient_phone} onChange={e => setForm(p => ({ ...p, recipient_phone: e.target.value }))} disabled={loading} className="input-field bg-white shadow-sm" />
-            </div>
-            <div>
               <label className="block text-xs font-bold mb-1.5 text-slate-600">نوع الشحنة</label>
               <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value as PricingType }))} disabled={loading} className="input-field bg-white shadow-sm">
                 <option value="per_order">بالطلب (Per Order)</option>
@@ -507,16 +499,6 @@ function EditShipmentModal({ shipment, onClose, onUpdate, clients, warehouses, s
             <div>
               <label className="block text-xs font-bold mb-1.5 text-slate-600">الوزن / العدد</label>
               <input type="number" step="0.1" placeholder="مثال: 10 كغم" value={form.weight} onChange={e => setForm(p => ({ ...p, weight: e.target.value }))} disabled={loading} className="input-field bg-white shadow-sm" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold mb-1.5 text-slate-600">المحافظة</label>
-              <select value={form.governorate} onChange={e => setForm(p => ({ ...p, governorate: e.target.value }))} disabled={loading} className="input-field bg-white shadow-sm">
-                {IRAQI_GOVERNORATES.map(g => <option key={g} value={g}>{g}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold mb-1.5 text-slate-600">المنطقة</label>
-              <input type="text" value={form.district} onChange={e => setForm(p => ({ ...p, district: e.target.value }))} disabled={loading} className="input-field bg-white shadow-sm" />
             </div>
             <div>
               <label className="block text-xs font-bold mb-1.5 text-slate-600">كلفة التوصيل</label>
