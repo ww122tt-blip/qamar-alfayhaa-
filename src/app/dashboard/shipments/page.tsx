@@ -5,7 +5,8 @@ import {
   Package, Plus, Search, Filter, Printer, Trash2, Edit, Eye,
   RefreshCw, Send, X, Phone, MapPin, Scale, DollarSign,
   CheckCircle, MessageSquare, AlertCircle, Loader2, ChevronDown,
-  ArrowUpDown, Clock, Truck, RotateCcw, CheckCircle2, XCircle, AlertTriangle, Image as ImageIcon, Warehouse as WarehouseIcon
+  ArrowUpDown, Clock, Truck, RotateCcw, CheckCircle2, XCircle, AlertTriangle, Image as ImageIcon, Warehouse as WarehouseIcon,
+  Flag, Lock, Info, Tag, Box, Weight, Users, Calculator, GitCommit, Barcode, User
 } from 'lucide-react'
 import { formatCurrency, formatDate, getStatusClass, getStatusLabel, IRAQI_GOVERNORATES, generateShipmentNumber } from '@/lib/utils'
 import type { ShipmentStatus, Shipment, Client, Warehouse } from '@/types'
@@ -448,89 +449,202 @@ function EditShipmentModal({ shipment, onClose, onUpdate, clients, warehouses, s
           </div>
           <button onClick={onClose} disabled={loading} className="btn-ghost p-2 rounded-lg hover:bg-slate-200 text-slate-500"><X size={18} /></button>
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {/* Status Change - LOCKED if shipment is with Waseet or Status is unmodifiable */}
-          <div className={`p-4 rounded-2xl border ${isLocked ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-100'}`}>
-            <div className="flex items-center justify-between mb-3">
-              <label className="block text-xs font-extrabold uppercase text-gold tracking-widest">تغيير الحالة</label>
-              {shipment.waseet_qr_id && (
-                <span className="flex items-center gap-1.5 text-xs font-bold bg-amber-100 text-amber-700 px-3 py-1 rounded-full border border-amber-200">
-                  <Truck size={12} /> يتحكم بها الوسيط • QR: {shipment.waseet_qr_id}
-                </span>
-              )}
-              {isLockedByStatus && !shipment.waseet_qr_id && (
-                <span className="flex items-center gap-1.5 text-xs font-bold bg-amber-100 text-amber-700 px-3 py-1 rounded-full border border-amber-200">
-                  🔒 غير قابلة للتعديل
-                </span>
-              )}
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {/* Section 1: Status Change */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="bg-slate-50 border-b border-slate-100 px-4 py-3 flex items-center gap-2">
+              <Flag size={16} className="text-red-500" />
+              <h3 className="font-bold text-slate-800">تغيير الحالة</h3>
             </div>
-            {isLocked ? (
-              <p className="text-xs text-amber-700 font-medium bg-amber-100 px-4 py-3 rounded-xl border border-amber-200">
-                🔒 {shipment.waseet_qr_id ? 'هذه الشحنة مع شركة الوسيط. يتم تحديث حالتها تلقائياً من الوسيط ولا يمكن تغييرها يدوياً.' : 'هذه الشحنة في حالة غير قابلة للتعديل. لا يمكن تغيير حالتها يدوياً.'}
-              </p>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {STATUS_STEPS.map(s => (
-                  <button key={s.value} type="button" onClick={() => setForm(p => ({ ...p, status: s.value }))}
-                    className={`p-2 rounded-xl text-xs font-bold border transition-all ${form.status === s.value ? 'text-white border-transparent shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}
-                    style={form.status === s.value ? { background: s.color, borderColor: s.color } : {}}>
-                    {s.label}
-                  </button>
-                ))}
-                {shippingStatuses.map(s => (
-                  <button key={s.id} type="button" onClick={() => setForm(p => ({ ...p, status: s.name as ShipmentStatus }))}
-                    className={`p-2 rounded-xl text-xs font-bold border transition-all ${form.status === s.name ? 'text-white border-transparent shadow-md bg-blue-500' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}>
-                    {s.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold mb-1.5 text-slate-600">نوع الشحنة</label>
-              <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value as PricingType }))} disabled={loading} className="input-field bg-white shadow-sm">
-                <option value="per_order">بالطلب (Per Order)</option>
-                <option value="per_kg">بالوزن / الكيلو</option>
-                <option value="carton">بالكارتون (Carton)</option>
-                <option value="bag">بالكيس (Bag)</option>
+            <div className="p-4 space-y-4">
+              <select 
+                value={form.status} 
+                onChange={e => setForm(p => ({ ...p, status: e.target.value as ShipmentStatus }))} 
+                className="input-field w-full"
+              >
+                {STATUS_STEPS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                {shippingStatuses.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
               </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold mb-1.5 text-slate-600">الوزن / العدد</label>
-              <input type="number" step="0.1" placeholder="مثال: 10 كغم" value={form.weight} onChange={e => setForm(p => ({ ...p, weight: e.target.value }))} disabled={loading} className="input-field bg-white shadow-sm" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold mb-1.5 text-slate-600">كلفة التوصيل</label>
-              <input type="number" value={form.delivery_fee} onChange={e => setForm(p => ({ ...p, delivery_fee: e.target.value }))} disabled={loading} className="input-field bg-white shadow-sm" />
+
+              {isLocked ? (
+                <>
+                  <div className="bg-amber-50 text-amber-800 p-3 rounded-lg text-sm flex items-center gap-2 border border-amber-200">
+                    <Lock size={16} /> 
+                    <span className="font-medium">تحذير: الحالة المختارة لا تسمح بتعديل تفاصيل الشحنة. سيتم تغيير الحالة فقط.</span>
+                  </div>
+                  <div className="bg-cyan-50 text-cyan-800 p-3 rounded-lg text-sm flex items-center gap-2 border border-cyan-200">
+                    <Info size={16} /> 
+                    <span className="font-medium">الحالة الحالية أو المختارة لا تسمح بتعديل تفاصيل الشحنة. يمكنك فقط تغيير الحالة.</span>
+                  </div>
+                </>
+              ) : (
+                <div className="bg-emerald-50 text-emerald-800 p-3 rounded-lg text-sm flex items-center gap-2 border border-emerald-200">
+                  <CheckCircle size={16} /> 
+                  <span className="font-medium">الحالة المختارة تسمح بتعديل تفاصيل الشحنة.</span>
+                </div>
+              )}
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold mb-1.5 text-slate-600">تحديث صورة الشحنة (اختياري)</label>
-              <div className="flex items-center gap-2">
-                <label className="flex-1 cursor-pointer bg-white border border-slate-200 border-dashed rounded-xl px-3 py-2 flex items-center justify-center text-xs text-slate-500 hover:bg-slate-50 transition-colors">
-                  <ImageIcon size={16} className="mr-2" />
-                  {imageFile ? imageFile.name : 'اختر صورة جديدة'}
-                  <input type="file" accept="image/*" className="hidden" onChange={e => setImageFile(e.target.files?.[0] || null)} disabled={loading} />
-                </label>
-                {imageFile && (
-                  <button type="button" onClick={() => setImageFile(null)} className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors">
-                    <X size={16} />
-                  </button>
-                )}
+
+          {!isLocked && (
+            <>
+              {/* Section 2: Basic Information */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="bg-slate-50 border-b border-slate-100 px-4 py-3 flex items-center gap-2">
+                  <Info size={16} className="text-red-500" />
+                  <h3 className="font-bold text-slate-800">المعلومات الأساسية</h3>
+                </div>
+                <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="col-span-1 sm:col-span-2 grid grid-cols-2 gap-4">
+                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-center">
+                      <p className="text-xs text-slate-500 mb-1 flex items-center justify-center gap-1"><Tag size={12}/> نوع التسعير</p>
+                      <p className="font-bold text-slate-700">{shipment.type}</p>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 text-center">
+                      <p className="text-xs text-slate-500 mb-1 flex items-center justify-center gap-1"><MapPin size={12}/> المستودع</p>
+                      <p className="font-bold text-slate-700">{shipment.warehouse?.name || '—'}</p>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-xs font-bold mb-1.5 text-slate-600 flex items-center gap-1"><Box size={14}/> نوع الشحنة</label>
+                    <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value as PricingType }))} disabled={loading} className="input-field bg-white w-full">
+                      <option value="per_order">بالطلب (Per Order)</option>
+                      <option value="per_kg">بالوزن / الكيلو</option>
+                      <option value="carton">بالكارتون (Carton)</option>
+                      <option value="bag">بالكيس (Bag)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold mb-1.5 text-slate-600 flex items-center gap-1"><Weight size={14}/> الوزن (كغ)</label>
+                    <input type="number" step="0.1" value={form.weight} onChange={e => setForm(p => ({ ...p, weight: e.target.value }))} disabled={loading} className="input-field bg-white w-full text-left" dir="ltr" />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold mb-1.5 text-slate-600">المستودع (اختياري)</label>
+                    <select value={form.warehouse_id} onChange={e => setForm(p => ({ ...p, warehouse_id: e.target.value }))} disabled={loading} className="input-field bg-white w-full">
+                      <option value="none">بدون مستودع</option>
+                      {warehouses.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                    </select>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div>
-              <label className="block text-xs font-bold mb-1.5 text-slate-600">ملاحظات</label>
-              <textarea rows={2} value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} disabled={loading} className="input-field resize-none shadow-sm h-[38px]" />
-            </div>
-          </div>
+
+              {/* Section 3: Pricing Information */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="bg-slate-50 border-b border-slate-100 px-4 py-3 flex items-center gap-2">
+                  <DollarSign size={16} className="text-red-500" />
+                  <h3 className="font-bold text-slate-800">معلومات التسعير</h3>
+                </div>
+                <div className="p-4 space-y-4">
+                  <div className="bg-slate-800 text-white rounded-xl p-4">
+                    <div className="flex justify-between items-center mb-3">
+                      <h4 className="font-bold flex items-center gap-2"><Users size={16}/> إعدادات التسعير للعميل</h4>
+                      <Tag size={16} className="text-red-400" />
+                    </div>
+                    <div className="text-sm space-y-1 text-slate-300">
+                      <p>نوع التسعير: <span className="text-white font-medium">{shipment.type}</span></p>
+                      <p>السعر المحدد: <span className="text-white font-medium">0 د.ع</span></p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5 text-slate-600 text-left">سعر الوحدة (د.ع)</label>
+                      <input type="text" value="0" disabled className="input-field bg-slate-50 w-full text-left font-mono" dir="ltr" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold mb-1.5 text-slate-600 text-left">سعر التوصيل (د.ع)</label>
+                      <input type="number" value={form.delivery_fee} onChange={e => setForm(p => ({ ...p, delivery_fee: e.target.value }))} disabled={loading} className="input-field bg-white w-full text-left font-mono" dir="ltr" />
+                    </div>
+                  </div>
+
+                  <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
+                    <div className="flex justify-between items-center mb-2">
+                      <div>
+                        <h4 className="font-bold text-emerald-800 flex items-center gap-2">إجمالي السعر المحسوب <Calculator size={16}/></h4>
+                        <p className="text-xs text-emerald-600">محسوب حسب نوع التسعير ووزن الشحنة</p>
+                      </div>
+                      <span className="text-lg font-bold text-emerald-600">{formatCurrency(parseFloat(form.delivery_fee) || 0)} د.ع</span>
+                    </div>
+                    <div className="text-xs space-y-1 mt-3 text-slate-600">
+                      <p className="font-bold text-red-500">طريقة الحساب: سعر ثابت (أكبر من أو يساوي الحد الأدنى)</p>
+                      <p>الحساب: سعر الطلب الثابت + سعر التوصيل</p>
+                      <p className="font-mono text-left w-full mt-1 bg-white p-1 rounded text-slate-800">{formatCurrency(parseFloat(form.delivery_fee) || 0)} + 0</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 4: Tracking Information */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="bg-slate-50 border-b border-slate-100 px-4 py-3 flex items-center gap-2">
+                  <GitCommit size={16} className="text-red-500" />
+                  <h3 className="font-bold text-slate-800">معلومات التتبع</h3>
+                </div>
+                <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold mb-1.5 text-slate-600 text-left flex items-center justify-end gap-1"><Barcode size={14}/> رقم التتبع</label>
+                    <input type="text" value={shipment.code || ''} disabled className="input-field bg-slate-50 w-full text-left font-mono" dir="ltr" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold mb-1.5 text-slate-600 text-left flex items-center justify-end gap-1"><Truck size={14}/> تتبع شركة التوصيل</label>
+                    <input type="text" value={shipment.waseet_qr_id || ''} disabled className="input-field bg-slate-50 w-full text-left font-mono" dir="ltr" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 5: Client Information (Read Only) */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="bg-slate-50 border-b border-slate-100 px-4 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <User size={16} className="text-red-500" />
+                    <h3 className="font-bold text-slate-800">معلومات العميل (للعرض فقط)</h3>
+                  </div>
+                </div>
+                <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50/50">
+                  <div className="bg-white p-3 rounded border border-slate-200">
+                    <p className="text-xs text-slate-400 mb-1 text-left flex items-center justify-end gap-1"><User size={12}/> اسم العميل</p>
+                    <p className="font-bold text-slate-700 text-left">{shipment.client?.name || '—'}</p>
+                  </div>
+                  <div className="bg-white p-3 rounded border border-slate-200">
+                    <p className="text-xs text-slate-400 mb-1 text-left flex items-center justify-end gap-1"><Phone size={12}/> رقم الهاتف الأساسي</p>
+                    <p className="font-bold text-slate-700 text-left" dir="ltr">{shipment.client?.phones?.[0] || '—'}</p>
+                  </div>
+                  <div className="bg-white p-3 rounded border border-slate-200">
+                    <p className="text-xs text-slate-400 mb-1 text-left flex items-center justify-end gap-1"><Tag size={12}/> علامة الشحن</p>
+                    <p className="font-bold text-slate-700 text-left">{shipment.code}</p>
+                  </div>
+                  <div className="bg-white p-3 rounded border border-slate-200">
+                    <p className="text-xs text-slate-400 mb-1 text-left flex items-center justify-end gap-1"><Tag size={12}/> نوع التسعير</p>
+                    <p className="font-bold text-slate-700 text-left">{shipment.type}</p>
+                  </div>
+                  <div className="bg-white p-3 rounded border border-slate-200">
+                    <p className="text-xs text-slate-400 mb-1 text-left flex items-center justify-end gap-1"><MapPin size={12}/> المحافظة</p>
+                    <p className="font-bold text-slate-700 text-left">{shipment.governorate}</p>
+                  </div>
+                  <div className="bg-white p-3 rounded border border-slate-200">
+                    <p className="text-xs text-slate-400 mb-1 text-left flex items-center justify-end gap-1"><Truck size={12}/> تكلفة التوصيل المحلي (د.ع)</p>
+                    <p className="font-bold text-slate-700 text-left">{formatCurrency(shipment.delivery_fee)}</p>
+                  </div>
+                  <div className="bg-white p-3 rounded border border-slate-200">
+                    <p className="text-xs text-slate-400 mb-1 text-left flex items-center justify-end gap-1"><MapPin size={12}/> المنطقة</p>
+                    <p className="font-bold text-slate-700 text-left">{shipment.district || '—'}</p>
+                  </div>
+                  <div className="bg-white p-3 rounded border border-slate-200">
+                    <p className="text-xs text-slate-400 mb-1 text-left flex items-center justify-end gap-1"><MapPin size={12}/> العنوان الكامل</p>
+                    <p className="font-bold text-slate-700 text-left">{shipment.district || '—'}</p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
           <div className="flex gap-3 pt-4 border-t border-slate-100">
-            <button type="submit" disabled={loading} className="btn-primary flex-1 justify-center py-3 shadow-md bg-blue-600 hover:bg-blue-700 disabled:opacity-50">
-              {loading ? <Loader2 size={18} className="animate-spin" /> : <Edit size={18} />} حفظ التعديلات
+            <button type="submit" disabled={loading} className={`btn-primary flex-1 justify-center py-3 shadow-md transition-all ${isLocked ? 'bg-red-500 hover:bg-red-600' : 'bg-red-500 hover:bg-red-600'} disabled:opacity-50`}>
+              {loading ? <Loader2 size={18} className="animate-spin" /> : null} 
+              {isLocked ? 'تغيير الحالة فقط' : 'تعديل الشحنة'}
             </button>
-            <button type="button" onClick={onClose} disabled={loading} className="btn-ghost flex-1 justify-center py-3">إلغاء</button>
+            <button type="button" onClick={onClose} disabled={loading} className="bg-slate-800 text-white hover:bg-slate-700 rounded-lg px-6 flex items-center justify-center py-3">إلغاء</button>
           </div>
         </form>
       </div>
@@ -618,8 +732,10 @@ function ViewShipmentModal({ shipment, onClose }: { shipment: Shipment; onClose:
 // ====== MAIN PAGE ======
 export default function ShipmentsPage() {
   const [shipments, setShipments] = useState<Shipment[]>([])
+  const [totalShipments, setTotalShipments] = useState(0)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<ShipmentStatus | 'all'>('all')
   const [governorateFilter, setGovernorateFilter] = useState('all')
   const [dateFrom, setDateFrom] = useState('')
@@ -634,26 +750,60 @@ export default function ShipmentsPage() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([])
   const [shippingStatuses, setShippingStatuses] = useState<{id: string, name: string, can_edit_shipment: boolean}[]>([])
 
-  const fetchShipmentsAndWarehouses = useCallback(async () => {
-    setLoading(true)
+  // Debounce search
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 500)
+    return () => clearTimeout(handler)
+  }, [search])
+
+  const fetchStaticData = useCallback(async () => {
     try {
-      const [shipmentsRes, warehousesRes, statusesRes] = await Promise.all([
-        supabase.from('shipments').select('*, client:clients(*), warehouse:warehouses(*)').order('created_at', { ascending: false }),
+      const [warehousesRes, statusesRes] = await Promise.all([
         supabase.from('warehouses').select('*'),
         supabase.from('shipping_statuses').select('id, name, can_edit_shipment').order('created_at', { ascending: true })
       ])
-      if (shipmentsRes.data) setShipments(shipmentsRes.data as unknown as Shipment[])
       if (warehousesRes.data) setWarehouses(warehousesRes.data as Warehouse[])
       if (statusesRes.data) setShippingStatuses(statusesRes.data as {id: string, name: string, can_edit_shipment: boolean}[])
-      if (shipmentsRes.error) console.error(shipmentsRes.error)
     } catch (err) {
-      console.error('Failed to fetch data:', err)
-    } finally {
-      setLoading(false)
+      console.error('Failed to fetch static data:', err)
     }
   }, [])
 
-  useEffect(() => { fetchShipmentsAndWarehouses() }, [fetchShipmentsAndWarehouses])
+  const fetchShipments = useCallback(async () => {
+    setLoading(true)
+    try {
+      let query = supabase.from('shipments').select('*, client:clients(*), warehouse:warehouses(*)', { count: 'exact' })
+
+      if (statusFilter !== 'all') query = query.eq('status', statusFilter)
+      if (governorateFilter !== 'all') query = query.eq('governorate', governorateFilter)
+      if (dateFrom) query = query.gte('created_at', dateFrom)
+      if (dateTo) query = query.lte('created_at', dateTo + 'T23:59:59')
+      
+      if (debouncedSearch) {
+        query = query.or(`code.ilike.%${debouncedSearch}%,number.ilike.%${debouncedSearch}%,recipient_name.ilike.%${debouncedSearch}%,recipient_phone.ilike.%${debouncedSearch}%`)
+      }
+
+      const from = (page - 1) * PAGE_SIZE
+      const to = from + PAGE_SIZE - 1
+      query = query.order('created_at', { ascending: false }).range(from, to)
+
+      const { data, count, error } = await query
+
+      if (error) throw error
+      if (data) setShipments(data as unknown as Shipment[])
+      if (count !== null) setTotalShipments(count)
+      
+    } catch (err) {
+      console.error('Failed to fetch shipments:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [page, statusFilter, governorateFilter, dateFrom, dateTo, debouncedSearch])
+
+  useEffect(() => { fetchStaticData() }, [fetchStaticData])
+  useEffect(() => { fetchShipments() }, [fetchShipments])
 
   const handleDelete = async (id: string, code: string) => {
     if(!confirm('هل أنت متأكد من حذف هذه الشحنة؟')) return
@@ -662,24 +812,12 @@ export default function ShipmentsPage() {
       setShipments(p => p.filter(s => s.id !== id))
       setSelectedIds(p => p.filter(x => x !== id))
       await logActivity('حذف شحنة', 'shipment', code, `تم حذف الشحنة ${code}`)
+      fetchShipments()
     }
   }
 
-  const filteredShipments = shipments.filter(s => {
-    const matchSearch = !search ||
-      (s.code || s.number || '').toLowerCase().includes(search.toLowerCase()) ||
-      s.recipient_name?.includes(search) ||
-      s.client?.name?.includes(search) ||
-      s.recipient_phone?.includes(search)
-    const matchStatus = statusFilter === 'all' || s.status === statusFilter
-    const matchGov = governorateFilter === 'all' || s.governorate === governorateFilter
-    const matchFrom = !dateFrom || new Date(s.created_at) >= new Date(dateFrom)
-    const matchTo = !dateTo || new Date(s.created_at) <= new Date(dateTo + 'T23:59:59')
-    return matchSearch && matchStatus && matchGov && matchFrom && matchTo
-  })
-
-  const totalPages = Math.ceil(filteredShipments.length / PAGE_SIZE)
-  const pagedShipments = filteredShipments.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const totalPages = Math.ceil(totalShipments / PAGE_SIZE) || 1
+  const pagedShipments = shipments
 
   const toggleSelect = (id: string) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   const selectAll = () => setSelectedIds(selectedIds.length === pagedShipments.length ? [] : pagedShipments.map(s => s.id))
@@ -692,7 +830,7 @@ export default function ShipmentsPage() {
             <Package size={20} className="text-gold" />
           </div>
           <span>قائمة الشحنات</span>
-          <span className="text-sm font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md mr-2">{filteredShipments.length} شحنة</span>
+          <span className="text-sm font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md mr-2">{totalShipments} شحنة</span>
         </div>
         <button onClick={() => setShowAddModal(true)} className="btn-primary shadow-sm">
           <Plus size={18} /> إضافة شحنة
