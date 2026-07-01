@@ -111,9 +111,20 @@ export default function MainDashboardPage() {
     setLoading(false)
   }
 
+  const [mounted, setMounted] = useState(false)
+
   useEffect(() => {
+    setMounted(true)
     fetchData()
   }, [])
+
+  if (!mounted) {
+    return (
+      <div className="flex justify-center items-center py-20">
+        <Loader2 size={32} className="text-gold animate-spin" />
+      </div>
+    )
+  }
 
   // Calculate Stats
   const totalShipments = shipments.length
@@ -145,7 +156,7 @@ export default function MainDashboardPage() {
   })
 
   const shipmentTrend = last7Days.map(date => {
-    const count = shipments.filter(s => s.created_at.startsWith(date)).length
+    const count = shipments.filter(s => s.created_at?.startsWith(date)).length
     const [year, month, day] = date.split('-')
     return { date: `${day}/${month}`, count }
   })
