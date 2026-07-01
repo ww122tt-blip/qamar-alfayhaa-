@@ -6,7 +6,7 @@ import {
   RefreshCw, Send, X, Phone, MapPin, Scale, DollarSign,
   CheckCircle, MessageSquare, AlertCircle, Loader2, ChevronDown,
   ArrowUpDown, Clock, Truck, RotateCcw, CheckCircle2, XCircle, AlertTriangle, Image as ImageIcon, Warehouse as WarehouseIcon,
-  Flag, Lock, Info, Tag, Box, Weight, Users, Calculator, GitCommit, Barcode, User
+  Flag, Lock, Info, Tag, Box, Weight, Users, Calculator, GitCommit, Barcode, User, Copy
 } from 'lucide-react'
 import { formatCurrency, formatDate, getStatusClass, getStatusLabel, IRAQI_GOVERNORATES, generateShipmentNumber } from '@/lib/utils'
 import type { ShipmentStatus, Shipment, Client, Warehouse } from '@/types'
@@ -940,20 +940,22 @@ export default function ShipmentsPage() {
                   <input type="checkbox" checked={selectedIds.length === pagedShipments.length && pagedShipments.length > 0} onChange={selectAll} className="w-4 h-4 rounded border-slate-300 text-gold focus:ring-gold cursor-pointer" />
                 </th>
                 <th>الرقم</th>
-                <th>المستلم</th>
+                <th>التتبع والموقع</th>
                 <th>العميل</th>
-                <th>الحالة</th>
-                <th>التوصيل</th>
+                <th>الحالة والتتبع</th>
+                <th>النوع والوزن</th>
+                <th>المدفوعات</th>
+                <th>المستودع</th>
                 <th>التاريخ</th>
                 <th>الإجراءات</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={9} className="text-center py-20"><Loader2 size={32} className="mx-auto text-gold animate-spin" /></td></tr>
+                <tr><td colSpan={10} className="text-center py-20"><Loader2 size={32} className="mx-auto text-gold animate-spin" /></td></tr>
               ) : pagedShipments.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="text-center py-16 text-slate-400">
+                  <td colSpan={10} className="text-center py-16 text-slate-400">
                     <Package size={48} className="mx-auto mb-4 text-slate-300" />
                     <p className="font-semibold text-lg text-slate-500">لا توجد شحنات مطابقة</p>
                     <p className="text-sm">قم بتغيير فلاتر البحث أو أضف شحنة جديدة</p>
@@ -961,52 +963,118 @@ export default function ShipmentsPage() {
                 </tr>
               ) : pagedShipments.map(s => (
                 <tr key={s.id} className={selectedIds.includes(s.id) ? 'bg-amber-50/50' : ''}>
-                  <td className="pl-0">
+                  <td className="pl-0 align-top pt-4">
                     <input type="checkbox" checked={selectedIds.includes(s.id)} onChange={() => toggleSelect(s.id)} className="w-4 h-4 rounded border-slate-300 text-gold focus:ring-gold cursor-pointer" />
                   </td>
-                  <td>
-                    <span className="font-mono text-xs font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded border border-slate-200">
-                      #{s.code || s.number}
-                    </span>
+                  
+                  {/* الرقم */}
+                  <td className="align-top pt-4">
+                    <div className="flex flex-col gap-2 w-max">
+                      <span className="font-mono text-[11px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-1 rounded-md shadow-sm">
+                        {s.code || s.number}
+                      </span>
+                      {s.waseet_qr_id ? (
+                        <span className="text-[11px] font-bold text-white bg-[#00a8e8] px-2 py-1 rounded-md shadow-sm flex items-center justify-center gap-1">
+                          <Truck size={12} /> الوسيط
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-md shadow-sm flex items-center justify-center gap-1 border border-slate-200">
+                          غير مرتبط
+                        </span>
+                      )}
+                    </div>
                   </td>
-                  <td>
-                    <div className="text-sm space-y-1">
-                      <div className="font-bold text-slate-800">{s.recipient_name}</div>
-                      <div className="text-slate-500 text-xs font-medium bg-slate-50 inline-block px-2 py-0.5 rounded border border-slate-100">
-                        {s.governorate}{s.district ? ' - ' + s.district : ''}
+
+                  {/* التتبع والموقع */}
+                  <td className="align-top pt-4 text-center">
+                    <div className="flex flex-col items-center gap-1.5 w-max mx-auto">
+                      <span className="font-mono text-[11px] font-bold text-white bg-red-500 px-3 py-1 rounded-md shadow-sm flex items-center justify-between w-full gap-2">
+                        {s.waseet_qr_id || '----'} <Barcode size={12} />
+                      </span>
+                      <span className="text-xs font-bold text-slate-700 mt-1">{s.governorate}</span>
+                      <span className="text-[11px] font-bold text-slate-500">{s.district || 'اخرى'}</span>
+                    </div>
+                  </td>
+
+                  {/* العميل */}
+                  <td className="align-top pt-4 text-center">
+                    <div className="flex flex-col items-center gap-1">
+                      <span className="text-sm font-bold text-slate-800">{s.client?.name || s.recipient_name || '—'}</span>
+                      <span className="text-[11px] font-mono text-slate-600" dir="ltr">{s.client?.phones?.[0] || s.recipient_phone || '—'}</span>
+                      <span className="text-[11px] font-mono font-bold text-red-500">{s.client?.code || '—'}</span>
+                    </div>
+                  </td>
+
+                  {/* الحالة والتتبع */}
+                  <td className="align-top pt-4 text-center">
+                    <div className="flex flex-col gap-1.5 items-center w-max mx-auto">
+                      <span className={`text-[11px] font-bold px-4 py-1 rounded-md shadow-sm w-full ${getStatusClass(s.status).replace('bg-opacity-20', '')}`}>
+                        {getStatusLabel(s.status)}
+                      </span>
+                      <span className="font-mono text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-md shadow-sm w-full flex justify-between items-center gap-2">
+                        {s.waseet_qr_id || '----'} <Truck size={12} />
+                      </span>
+                      <span className="text-[11px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-3 py-1 rounded-md shadow-sm w-full">
+                        عادية
+                      </span>
+                    </div>
+                  </td>
+
+                  {/* النوع والوزن */}
+                  <td className="align-top pt-4 text-center">
+                    <div className="flex flex-col items-center gap-1">
+                      <span className="text-[11px] font-bold text-white bg-red-500 px-3 py-1 rounded-md shadow-sm flex justify-center items-center gap-1 w-max mx-auto">
+                        <Box size={12} /> {s.type === 'carton' ? 'صندوق' : s.type === 'bag' ? 'كيس' : 'طرد'}
+                      </span>
+                      <span className="text-[11px] font-bold text-slate-600 flex items-center justify-center gap-1 mt-1">
+                        <Weight size={10} /> {s.weight || 0} كغ
+                      </span>
+                      <div className="flex flex-col items-center mt-1 text-[10px] font-bold text-red-500">
+                        <span>سعر/كغ: 0 د.ع</span>
+                        <span>توصيل: {formatCurrency(s.delivery_fee)} د.ع</span>
                       </div>
                     </div>
                   </td>
-                  <td>
-                    <div className="font-bold text-slate-800 text-sm">{s.client?.name || '—'}</div>
-                    <div className="text-xs text-slate-500 font-mono" dir="ltr">{s.client?.code || ''}</div>
+
+                  {/* المدفوعات */}
+                  <td className="align-top pt-4">
+                    <div className="flex flex-col gap-1.5 w-max mx-auto">
+                      <span className="text-[11px] font-bold text-emerald-800 bg-emerald-300 px-2 py-1 rounded-md shadow-sm flex items-center justify-between gap-1 w-full">
+                        <DollarSign size={12} /> {formatCurrency(s.delivery_fee)} د.ع
+                      </span>
+                      <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-1 w-full">
+                        <CheckCircle size={10} /> مدفوع: 0 د.ع
+                      </span>
+                      <span className="text-[10px] font-bold text-amber-600 flex items-center gap-1 w-full">
+                        <Clock size={10} /> متبقي: {formatCurrency(s.delivery_fee)} د.ع
+                      </span>
+                    </div>
                   </td>
-                  <td>
-                    <span className={`badge ${getStatusClass(s.status)} shadow-sm whitespace-nowrap`}>
-                      <span className="w-2 h-2 rounded-full bg-current opacity-75" />
-                      {getStatusLabel(s.status)}
-                    </span>
+
+                  {/* المستودع */}
+                  <td className="align-top pt-4 text-center font-bold text-slate-700 text-[11px]">
+                    <div className="flex flex-col items-center gap-1">
+                      <span className="text-slate-500">مستودع</span>
+                      <span>{s.warehouse?.name || '—'}</span>
+                    </div>
                   </td>
-                  <td>
-                    <span className="text-slate-800 font-bold bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
-                      {formatCurrency(s.delivery_fee)}
-                    </span>
+
+                  {/* التاريخ */}
+                  <td className="align-top pt-4 text-center font-bold text-slate-500 text-[11px] font-mono">
+                    <div className="flex flex-col items-center gap-1">
+                      {s.created_at.split('T')[0].split('-').reverse().join('-')}
+                    </div>
                   </td>
-                  <td><span className="text-xs font-medium text-slate-500">{formatDate(s.created_at)}</span></td>
-                  <td>
-                    <div className="flex items-center gap-1.5 flex-wrap min-w-[180px]">
-                      <button className="btn-action edit" title="تعديل" onClick={() => setEditingShipment(s)}>
-                        <Edit size={14} /> <span>تعديل</span>
-                      </button>
-                      <button className="btn-action view" title="عرض" onClick={() => setViewingShipment(s)}>
-                        <Eye size={14} /> <span>عرض</span>
-                      </button>
-                      <button className="btn-action delete" title="حذف" onClick={() => handleDelete(s.id, s.code || s.number || '')}>
-                        <Trash2 size={14} /> <span>حذف</span>
-                      </button>
-                      <a href={`/print/${s.id}`} target="_blank" rel="noopener noreferrer" className="btn-action view" title="طباعة">
-                        <Printer size={14} /> <span>طباعة</span>
-                      </a>
+
+                  {/* الإجراءات */}
+                  <td className="align-top pt-4">
+                    <div className="flex items-center justify-center gap-3">
+                      <button className="text-blue-500 hover:text-blue-700 transition-colors" title="نسخ"><Copy size={16} /></button>
+                      <button className="text-red-500 hover:text-red-700 transition-colors" title="حذف" onClick={() => handleDelete(s.id, s.code || s.number || '')}><Trash2 size={16} /></button>
+                      <a href={`/print/${s.id}`} target="_blank" rel="noopener noreferrer" className="text-emerald-500 hover:text-emerald-700 transition-colors" title="طباعة"><Printer size={16} /></a>
+                      <button className="text-emerald-500 hover:text-emerald-700 transition-colors" title="استلام"><Box size={16} /></button>
+                      <button className="text-gold hover:text-amber-600 transition-colors" title="تعديل" onClick={() => setEditingShipment(s)}><Edit size={16} /></button>
+                      <button className="text-red-500 hover:text-red-700 transition-colors" title="عرض" onClick={() => setViewingShipment(s)}><Eye size={16} /></button>
                     </div>
                   </td>
                 </tr>
